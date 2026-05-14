@@ -325,6 +325,7 @@ _main_end:
   strh r1, [r8]
 
   @ Uncompress/extract the font glyphs. This supports any size.
+#ifndef NO_SD_MODE
   ldr r0, =font_start
   #if defined(COMPRESS_FONTS)
     mov r2, $((font_end - font_start + 2047) / 2048)
@@ -341,6 +342,7 @@ _main_end:
     bl sdram_copy                      @ Copy fonts directly (no unpacking)
   #endif
 
+#endif /* !NO_SD_MODE */
   @ Uncompress the patch database. The uncompressed payload must be < 256KiB!
   #if defined(COMPRESS_PATCHES)
     mov r0, r12

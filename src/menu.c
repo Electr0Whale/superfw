@@ -1638,8 +1638,8 @@ static const char *render_gbarom_loading(volatile uint8_t *frame, const t_load_g
 
 void render_gba_load_popup(volatile uint8_t *frame) {
   draw_box_outline(frame, 2, 240-2, 18, 158, FG_COLOR);
-  draw_text_ovf("⯇", frame, 10, 23, 64);
-  draw_rightj_text("⯈", frame, SCREEN_WIDTH - 10, 23);
+  draw_text_ovf("◀", frame, 10, 23, 64);
+  draw_rightj_text("▶", frame, SCREEN_WIDTH - 10, 23);
 
   const t_load_gba_info *info = &spop.p.load.i;
   const t_patch *p = get_game_patch(info);
@@ -1705,8 +1705,8 @@ void render_filemgr(volatile uint8_t *frame) {
 void render_gba_norwrite(volatile uint8_t *frame) {
   draw_box_outline(frame, 2, 240-2, 18, 158, FG_COLOR);
 
-  draw_text_ovf("⯇", frame, 10, 23, 64);
-  draw_rightj_text("⯈", frame, SCREEN_WIDTH - 10, 23);
+  draw_text_ovf("◀", frame, 10, 23, 64);
+  draw_rightj_text("▶", frame, SCREEN_WIDTH - 10, 23);
 
   if (spop.submenu == GbaLoadPopInfo) {
     const t_load_gba_info *info = &spop.p.norwr.i;
@@ -1734,8 +1734,8 @@ void render_gba_norwrite(volatile uint8_t *frame) {
 void render_gba_norload(volatile uint8_t *frame) {
   draw_box_outline(frame, 2, 240-2, 18, 158, FG_COLOR);
 
-  draw_text_ovf("⯇", frame, 10, 23, 64);
-  draw_rightj_text("⯈", frame, SCREEN_WIDTH - 10, 23);
+  draw_text_ovf("◀", frame, 10, 23, 64);
+  draw_rightj_text("▶", frame, SCREEN_WIDTH - 10, 23);
 
   t_flash_game_entry *e = &sdr_state->nordata.games[smenu.fbrowser.selector];
   if (spop.submenu == GbaLoadPopInfo) {
@@ -1803,8 +1803,8 @@ void render_rtcpop(volatile uint8_t *frame) {
   const uint8_t cox[] = {
     60, 94, 120, 154, 180
   };
-  draw_central_text("⯅", frame, cox[spop.rtcpop.selector], 54);
-  draw_central_text("⯆", frame, cox[spop.rtcpop.selector], 84);
+  draw_central_text("▲", frame, cox[spop.rtcpop.selector], 54);
+  draw_central_text("▼", frame, cox[spop.rtcpop.selector], 84);
 }
 
 void render_settings(volatile uint8_t *frame) {
@@ -1814,9 +1814,9 @@ void render_settings(volatile uint8_t *frame) {
                      smenu.set.selector - 2;
 
   if (smenu.set.selector > 2)
-    draw_central_text("⯅", frame, 120, 15);
+    draw_central_text("▲", frame, 120, 15);
   if (smenu.set.selector < SettSave - 2)
-    draw_central_text("⯆", frame, 120, 125);
+    draw_central_text("▼", frame, 120, 125);
 
   unsigned msk = 0x1F << baseopt;
   unsigned optcnt = 0;

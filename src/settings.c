@@ -35,10 +35,10 @@ const t_combo_key hotkey_list[] = {
   {"L+R",           0x00FF},
   {"L+R+A",         0x00FE},
   {"L+R+B",         0x00FD},
-  {"L+R+⯇+A",       0x00DE},
-  {"L+R+⯈+B",       0x00ED},
-  {"L+R+⯅+A",       0x00BE},
-  {"L+R+⯆+A",       0x007E},
+  {"L+R+◀+A",       0x00DE},
+  {"L+R+▶+B",       0x00ED},
+  {"L+R+▲+A",       0x00BE},
+  {"L+R+▼+A",       0x007E},
   {"A+B+Start",     0x03F4},
   {"A+B+Select",    0x03F8},
   {"A+B+Start+Sel", 0x03F0},
@@ -63,7 +63,7 @@ const uint8_t animspd_lut[] = {
 
 // Menu settings
 uint32_t menu_theme = 0;
-uint32_t lang_id = 0;
+uint32_t lang_id = 1;  // zh (Chinese) as default (en=0, zh=1)
 uint32_t recent_menu = 1;
 uint32_t hide_hidden = 0;
 uint32_t anim_speed = animspd_cnt / 2;

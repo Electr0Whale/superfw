@@ -135,6 +135,31 @@ static int main_gba() {
 
   // Video is configured in Mode 4 with the logo rendered on the screen.
 
+#ifdef NO_SD_MODE
+  // Emulator / no-SD path: skip all SD and Supercard hardware init.
+  display_info_msg("SuperFW " FW_FLAVOUR " - EMU (NO SD)");
+
+  // SDRAM is not mapped on emulators; fonts.pack sits in ROM.
+  // Scan for the "FO\1" magic.  The embedded font has dsize ~1.5KB;
+  // the real pack has dsize > 500KB, so use a high threshold to
+  // skip any false positives inside the firmware binary.
+  {
+    const uint8_t *scan = (const uint8_t*)0x08040000;
+    const uint8_t *end  = (const uint8_t*)0x08400000;
+    for (; scan < end; scan += 4) {
+      if (scan[0] == 'F' && scan[1] == 'O' && scan[2] == 1) {
+        uint32_t dsize = *(const uint32_t*)(scan + 4);
+        if (dsize > 500000) {
+          font_base_addr = (void*)scan;
+          break;
+        }
+      }
+    }
+  }
+
+  int sram_tres = -1;
+  memset(&pdbinfo, 0, sizeof(pdbinfo));
+#else
   // Setup the ROM mapping to allow SD driver. Allow SDRAM usage (as buffer)
   set_supercard_mode(MAPPED_SDRAM, true, true);
 
@@ -155,6 +180,7 @@ static int main_gba() {
   memset(&pdbinfo, 0, sizeof(pdbinfo));
   patchmem_dbinfo((uint8_t*)ROM_PATCHDB_U8, &pdbinfo.patch_count, pdbinfo.version, pdbinfo.date, pdbinfo.creator);
   set_supercard_mode(MAPPED_SDRAM, true, true);
+#endif
 
   // Configure video mode so we can render the menu.
   setup_video();

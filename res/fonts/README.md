@@ -1,27 +1,37 @@
+# SuperFW Font Pack
 
-unscii-16.hex and unscii-16-full.hex
+## Fusion Pixel 12px Monospaced (current)
 
-Downloaded from http://viznut.fi/unscii/ under the GPL license
+Source: https://github.com/TakWolf/fusion-pixel-font (MIT/OFL-1.1 license)
 
-hangul-blocks.hex is also part of unifont, manually filtered and
-re-numbered to work with hangul.h
+Download the BDF release from:
+  https://github.com/TakWolf/fusion-pixel-font/releases/latest
+  (fusion-pixel-font-12px-monospaced-bdf-vYYYY.MM.DD.zip)
 
-The font pack has been generated using:
+Extract `fusion-pixel-12px-monospaced-zh_hans.bdf` and place it here.
 
-./generator.py  --font-files unscii-16-full.hex hangul-blocks.hex \
-  --font-blocks cjk-sym,latin,latin-a,latin-b,greek,cyrilic,hiragana,katakana,cjk-uni,hangul-part \
-  --output ../fonts.pack
-
-A full-hangul version (no char composition) can be generated using:
-
-./generator.py  --font-files unscii-16-full.hex hangul-blocks.hex \
+### Standard pack (fonts.pack):
+```
+python3 bdf_to_pack.py \
+  --bdf fusion-pixel-12px-monospaced-zh_hans.bdf \
   --font-blocks cjk-sym,latin,latin-a,latin-b,greek,cyrilic,hiragana,katakana,cjk-uni,hangul \
-  --output ../fonts-ext.pack
+  --output ../fonts.pack
+```
 
-The full font pack (for debugging purposes) can be generated using:
+### Extended pack (fonts-ext.pack, for Chis board):
+Same as standard; both use pre-composed hangul.
 
-./generator.py --font-files unscii-16-full.hex \
-  --font-blocks ascii,check,arrows,arrows2,cjk-sym,latin,latin-a,latin-b,greek,cyrilic,hiragana,katakana,cjk-uni,hangul \
-  --output ../fonts-full.pack
+### Embedded font (font_embed.h):
+```
+python3 bdf_to_pack.py \
+  --bdf fusion-pixel-12px-monospaced-zh_hans.bdf \
+  --font-blocks ascii,check,triangles \
+  --output /tmp/embed-fonts.pack
 
+python3 pack_to_carray.py /tmp/embed-fonts.pack > ../../src/fonts/font_embed.h
+```
 
+## Legacy (UNSCII / Unifont)
+
+The old generator.py and unscii-16.hex / hangul-blocks.hex files are kept for reference
+but are no longer used in the build pipeline.

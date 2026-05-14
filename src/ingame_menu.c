@@ -592,7 +592,7 @@ void draw_popup(uint8_t *fb) {
     draw_text_center(msgs[ingame_menu_lang][IMENU_QC1_YES], fb, SCREEN_WIDTH/3,   topy + 24, HI_COLOR);
     draw_text_center(msgs[ingame_menu_lang][IMENU_QC0_NO],  fb, SCREEN_WIDTH*2/3, topy + 24, HI_COLOR);
     unsigned cx = SCREEN_WIDTH / 3 * (2 - popup.opt) - font_width(msgs[ingame_menu_lang][IMENU_QC0_NO + popup.opt]) / 2;
-    draw_text("⯈", fb, cx - 10, topy + 24, HI_COLOR);
+    draw_text("▶", fb, cx - 10, topy + 24, HI_COLOR);
   }
   selbarpos = NOSELBAR;   // Disable bar to ensure we do not overdraw
 }
@@ -645,11 +645,11 @@ void draw_rtc_menu(uint8_t *fb, unsigned framen) {
     const uint8_t cox[] = {
       68, 103, 127, 156, 178
     };
-    draw_text_center("⯅", fb, cox[copt], 40, HI_COLOR);
-    draw_text_center("⯆", fb, cox[copt], 70, HI_COLOR);
+    draw_text_center("▲", fb, cox[copt], 40, HI_COLOR);
+    draw_text_center("▼", fb, cox[copt], 70, HI_COLOR);
   } else if (copt == 5) {
-    draw_text_center("⯅", fb, SCREEN_WIDTH/2, 77, HI_COLOR);
-    draw_text_center("⯆", fb, SCREEN_WIDTH/2, 107, HI_COLOR);
+    draw_text_center("▲", fb, SCREEN_WIDTH/2, 77, HI_COLOR);
+    draw_text_center("▼", fb, SCREEN_WIDTH/2, 107, HI_COLOR);
   } else
     selbarpos = 130;
 
@@ -731,9 +731,9 @@ void draw_states_menu(uint8_t *fb, unsigned framen) {
     draw_icon(fb, iconn, xpoint, 64);
   }
   if (state_slot < max_state - 3)
-    draw_text("⯈", fb, SCREEN_WIDTH - 20, 64, FG_COLOR);
+    draw_text("▶", fb, SCREEN_WIDTH - 20, 64, FG_COLOR);
   if (state_slot >= -num_dsk_savestates + 3)
-    draw_text("⯇", fb, 12, 64, FG_COLOR);
+    draw_text("◀", fb, 12, 64, FG_COLOR);
 
   if (state_slot < 0) {
     npf_snprintf(tmp, sizeof(tmp), msgs[ingame_menu_lang][IMENU_SSTATE_PN], -state_slot);

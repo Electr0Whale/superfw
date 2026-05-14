@@ -30,6 +30,7 @@ extern void *font_base_addr;
 // Memory structures that describe character/font data.
 
 #define FLAG_FW16     0x00000001
+#define FLAG_FW12     0x00000002
 #define FLAG_COMP     0x80000000
 
 typedef struct {
@@ -60,7 +61,7 @@ typedef struct {
 // Looks up block info for a character code.
 static bool lookup_chptr(uint32_t code, t_char_render_info *chinfo) {
   // Add here any font database pointers as you wish, they are looked up in order.
-  void *font_dblist[] = {
+  const void *font_dblist[] = {
     font_ascii_embedded,
     font_base_addr,
   };
@@ -92,15 +93,20 @@ static bool lookup_chptr(uint32_t code, t_char_render_info *chinfo) {
           chinfo->spacing_cols = 0;   // No spacing for fixed width chars.
           chinfo->nchars = 1;
           chinfo->data[0] = &chptr[16 * code_offset];
+        } else if (chdat->charblks[i].flags & FLAG_FW12) {
+          chinfo->char_width = 12;
+          chinfo->spacing_cols = 1;
+          chinfo->nchars = 1;
+          chinfo->data[0] = &chptr[12 * code_offset];
         } else {
           // Lookup the second index (contains widths and offsets)
           uint16_t ientry = chptr[code_offset];
           const uint16_t *chdata = &chptr[chdat->charblks[i].end_char - chdat->charblks[i].start_char + 1];
 
-          chinfo->char_width = (ientry >> 13) + 1;
+          chinfo->char_width = (ientry >> 12) + 1;
           chinfo->spacing_cols = CHAR_SPACING;
           chinfo->nchars = 1;
-          chinfo->data[0] = &chdata[ientry & 0x1FFF];
+          chinfo->data[0] = &chdata[ientry & 0xFFF];
         }
         return true;
       }

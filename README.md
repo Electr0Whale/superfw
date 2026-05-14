@@ -1,6 +1,26 @@
 
-SuperFW
-=======
+SuperFW (wqy10pt-font fork)
+============================
+
+> **This fork** replaces the default UNSCII font with **WenQuanYi 10pt bitmap font**,
+> and adds a `NO_SD_MODE=1` build flag for running in GBA emulators (mGBA etc.)
+> without SD card hardware emulation.
+>
+> Key changes from upstream:
+> - **WenQuanYi 10pt** as the primary menu font (12px CJK, variable-width Latin)
+> - **Fusion Pixel 12px** as optional fallback for missing glyphs
+> - **Variable-width glyphs extended** from 8 to 12 columns (for 'w', 'W', 'm')
+> - **FLAG_FW12** fixed-width mode for 12px CJK blocks
+> - **NO_SD_MODE compile flag** — skips SD init, scans ROM for font data, runs on mGBA
+> - **Baseline-aligned vertical centering** for consistent Latin/CJK alignment
+> - **Chinese (zh) as default UI language**
+> - **General Punctuation block** (U+2000–U+206F) included in font coverage
+>
+> Build for emulator: `make BOARD=chis NO_SD_MODE=1 BUNDLE_GBC_EMULATOR=0 BUNDLE_OTHER_EMULATORS=0`
+>
+> Build for hardware: `make BOARD=chis BUNDLE_GBC_EMULATOR=0 BUNDLE_OTHER_EMULATORS=0`
+
+---
 
 An alternative firmware for Supercard GBA flash carts
 

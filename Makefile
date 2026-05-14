@@ -12,8 +12,28 @@ COMPRESSION_RATIO ?= 4
 
 GLOBAL_DEFINES = -D__GBA__
 
+# Ensure Python outputs UTF-8 (needed on Windows CJK locales)
+export PYTHONIOENCODING = utf-8
+
+# Font source: "bdf" (Fusion Pixel) or "pcf" (WenQuanYi)
+FONT_SOURCE ?= bdf
+FONT_INPUT ?= fusion-pixel-12px-monospaced-zh_hans.bdf
+ifeq ($(FONT_SOURCE),pcf)
+  FONT_INPUT = wenquanyi_9pt.pcf
+endif
+
 # BOARD can be "sd", "lite", "chis"
 BOARD ?= sd
+
+# NO_SD_MODE=1 builds firmware that skips SD-card init and runs without
+# FatFs.  Useful for emulators (mGBA, etc.) where the Supercard CPLD and
+# SD interface are not emulated.  The menu will appear with default
+# settings and an empty file list.  Fonts fall back to embedded ASCII.
+# Usage:
+#   make NO_SD_MODE=1              — one-shot emulator build
+#   make emu                       — same, via convenience target
+#   make clean && make              — revert to normal hardware build
+NO_SD_MODE ?= 0
 
 ifeq ($(BOARD),lite)
   GLOBAL_DEFINES += -DSUPERCARD_LITE_IO
@@ -32,9 +52,15 @@ else ifeq ($(BOARD),chis)
   BUNDLE_OTHER_EMULATORS = 1
   # Can't be over 2MiB (hardlimit)
   MAXFSIZE = 2048
-  FWFLAVOUR = "Chis"
+  FWFLAVOUR = "Chis-wqy10pt"
 else
   $(error No valid board specified in BOARD)
+endif
+
+# Emulator mode: no compression (to skip upkr/cargo), large ROM size.
+ifeq ($(NO_SD_MODE),1)
+  COMPRESS_FIRMWARE = 0
+  MAXFSIZE = 4096
 endif
 
 FWBINFILES=firmware.ewram.gba res/patches.db res/fonts.pack
@@ -65,6 +91,7 @@ CFLAGS=-O2 -ggdb \
        -DSC_FAST_ROM_MIRROR="use_fast_mirror()" \
        -DSD_PREERASE_BLOCKS_WRITE \
        -DVERSION_WORD="$(VERSION_WORD)" \
+       $(if $(filter 1,$(NO_SD_MODE)),-DNO_SD_MODE) \
        -DVERSION_SLUG_WORD="0x$(VERSION_SLUG_WORD)" \
        -Wall -Isrc -I. -mthumb -flto -flto-partition=none
 
@@ -203,13 +230,17 @@ firmware.ewram.gba.comp:	firmware.ewram.gba ./upkr/target/release/upkr
 	./apultra/apultra $< $@
 
 %.ld.i:	%.ld
-	cpp $< -o $@
+	$(PREFIX)cpp $< -o $@
 
 apultra/apultra:
 	make -C apultra
 
 upkr/target/release/upkr:
 	cd upkr/ && cargo build --release
+
+# Convenience target: build for emulators (skips SD card init).
+emu:
+	$(MAKE) NO_SD_MODE=1
 
 clean:
 	rm -f ldscripts/*.i *.gba *.elf *.payload *.map res/*.comp emu/*.comp *.comp src/menu_messages.h src/messages_data.h

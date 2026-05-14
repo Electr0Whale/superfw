@@ -6,19 +6,7 @@ import os, sys, json
 # Main menu/firmware string database.
 
 OTHER_LANGS = [
-  "es",
-  "fr",
-  "it",
-  "de",
-  "ca",
-  "pt",
-  "cs",
   "zh",
-  "ko",
-  "uk",
-  "ru",
-  "id",
-  "ms",
 ]
 
 en_strings = [
@@ -360,7 +348,7 @@ elif len(sys.argv) > 1 and sys.argv[1] == "h":
   # Attempt to load strings for all other languages
   langdir = os.path.join(os.path.dirname(__file__), "lang")
   for l in OTHER_LANGS:
-    d = json.load(open(os.path.join(langdir, "%s.json" % l)))
+    d = json.load(open(os.path.join(langdir, "%s.json" % l), encoding='utf-8'))
     print("const char * const msg_%s[] = {" % l)
     for k, (en_v, c) in sorted(strlist.items()):
       if c:

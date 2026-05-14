@@ -1,31 +1,43 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-# Generate font using
-# ./generator.py  --font-files unscii-16-full.hex  --font-blocks ascii,arrows,cjk-sym,latin,latin-a,latin-b,greek,cyrilic,hiragana,katakana,cjk-uni,hangul --output ../fonts-full.pack
+# Generate font using:
+#   python3 bdf_to_pack.py --bdf fusion-pixel-zh_hans.bdf --output ../fonts.pack
+# Or for full:
+#   python3 bdf_to_pack.py --bdf fusion-pixel-zh_hans.bdf --output ../fonts-full.pack
 
-import json, struct, os
+import json, struct, os, sys
 
 # Load font from pack directly, and parse it to generate a char-width table
 charw = {}
-fdata = open("res/fonts-full.pack", "rb").read()
+
+fontpath = sys.argv[1] if len(sys.argv) > 1 else "res/fonts.pack"
+fdata = open(fontpath, "rb").read()
 m1, m2, ver, bk, size = struct.unpack("<BBBBI", fdata[:8])
 fdata = fdata[8:]
 
 assert m1 == 70 and m2 == 79 and ver == 1
-CHAR_SPACING = 1
+CHAR_SPACING = 1    # Must match font_render.c
+
+FLAG_FW16 = 0x00000001
+FLAG_FW12 = 0x00000002
 
 dataoff = bk * 16
 for i in range(bk):
   start, end, flgs, off = struct.unpack("<IIII", fdata[i*16:(i+1)*16])
-  if flgs & 1:
-    # Fixed 16 pixels wide.
+  if flgs & FLAG_FW16:
+    # Fixed 16 pixels wide (legacy).
     for c in range(start, end+1):
       charw[c] = 16
+  elif flgs & FLAG_FW12:
+    # Fixed 12 pixels wide (Fusion Pixel CJK).
+    for c in range(start, end+1):
+      charw[c] = 12 + CHAR_SPACING
   else:
+    # Variable width (Latin, 1-8 columns).
     for i, c in enumerate(range(start, end+1)):
       idx = struct.unpack("<H", fdata[dataoff + i * 2 : dataoff + i * 2 + 2])[0]
-      charw[c] = (idx >> 13) + 1 + CHAR_SPACING
+      charw[c] = (idx >> 12) + 1 + CHAR_SPACING
 
 
 # Attempts to do some sanity checking with translations
