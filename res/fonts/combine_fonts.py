@@ -20,10 +20,13 @@ ALL_BLOCKS = {
     "cyrilic":    ( 0x400,  0x4FF, "latin"),
     "check":      (0x2610, 0x2611, "cjk"),
     "triangles":  (0x25B2, 0x25C0, "cjk"),
-    "cjk-sym":    (0x3000, 0x3009, "cjk"),
+    "shapes":     (0x25A0, 0x26FF, "cjk"),
+    "cjk-sym":    (0x3000, 0x303F, "cjk"),
+    "cjk-compat": (0x3100, 0x4DFF, "cjk"),
     "hiragana":   (0x3040, 0x309F, "cjk"),
     "katakana":   (0x30A0, 0x30FF, "cjk"),
     "hangul":     (0xAC00, 0xD7A3, "cjk"),
+    "fullwidth":  (0xFF00, 0xFFEF, "cjk"),
     "cjk-uni":    (0x4E00, 0x9FEF, "cjk"),
 }
 

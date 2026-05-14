@@ -7,6 +7,10 @@ import os, sys, json
 
 OTHER_LANGS = [
   "zh",
+  "ja",
+  "ru",
+  "id",
+  "ms",
 ]
 
 en_strings = [
