@@ -49,9 +49,10 @@ enum {
   #ifdef SUPPORT_NORGAMES
   MENUTAB_NORBROWSE,     // Browses Flash games and launches them.
   #endif
+  MENUTAB_RANDOM,        // Random game picker
   MENUTAB_SETTINGS,      // General settings / defaults
   MENUTAB_UILANG,        // UI / Language settings
-  MENUTAB_TOOLS,         // Tools (advaned menu)
+  MENUTAB_TOOLS,         // Tools (advanced menu)
   MENUTAB_INFO,          // Info / About / Updater?
   MENUTAB_MAX,
 };
@@ -94,9 +95,10 @@ enum {
   UiSetTheme = 0,
   UiSetLang  = 1,
   UiSetRect  = 2,
-  UiSetASpd  = 3,
-  UiSetSave  = 4,
-  UiSetMAX   = 4,
+  UiSetRand  = 3,
+  UiSetASpd  = 4,
+  UiSetSave  = 5,
+  UiSetMAX   = 5,
 };
 
 enum {
@@ -294,6 +296,16 @@ static struct {
     int selector;                 // Render panel
     char tstr[64];                // Temp message render
   } info;
+
+  // Random game picker
+  struct {
+    struct { char fpath[MAX_FN_LEN]; char name[48]; uint32_t size; bool isdir; } roms[7];
+    int count;          // number of ROMs displayed
+    int selector;       // selected row (0-6 = rom, 7 = refresh)
+    uint32_t randstate; // LCG state
+    int prev_indices[7];// previous batch indices
+    bool loaded;        // batch is loaded
+  } random;
 } smenu;
 
 // Same but for popups.
@@ -1409,7 +1421,7 @@ void render_flashbrowser(volatile uint8_t *frame) {
 
   human_size(tmp1, sizeof(tmp1), smenu.fbrowser.usedblks * NOR_BLOCK_SIZE);
   human_size(tmp2, sizeof(tmp2), NOR_GAMEBLOCK_COUNT * NOR_BLOCK_SIZE);
-  npf_snprintf(tmp, sizeof(tmp), "Flash usage: %s/%s", tmp1, tmp2);
+  npf_snprintf(tmp, sizeof(tmp), "%s: %s/%s", msgs[lang_id][MSG_FLASH_USAGE], tmp1, tmp2);
   draw_text_ovf(tmp, frame, 8, 144, SCREEN_WIDTH - 16);
 
   for (unsigned i = 0; i < 240; i += 16)
@@ -1934,8 +1946,11 @@ void render_ui_settings(volatile uint8_t *frame) {
   draw_text_ovf(msgs[lang_id][MSG_UIS_RECNT], frame, 8, 22 + 40, 224);
   draw_central_text(msgs[lang_id][recent_menu ? MSG_KNOB_ENABLED : MSG_KNOB_DISABLED], frame, colx, 22 + 40 );
 
-  draw_text_ovf(msgs[lang_id][MSG_UIS_ANSPD], frame, 8, 22 + 60, 224);
-  draw_central_text(msgs[lang_id][MSG_UIS_SPD0 + anim_speed], frame, colx, 22 + 60 );
+  draw_text_ovf(msgs[lang_id][MSG_UIS_RANDOM], frame, 8, 22 + 60, 224);
+  draw_central_text(msgs[lang_id][random_menu ? MSG_KNOB_ENABLED : MSG_KNOB_DISABLED], frame, colx, 22 + 60 );
+
+  draw_text_ovf(msgs[lang_id][MSG_UIS_ANSPD], frame, 8, 22 + 80, 224);
+  draw_central_text(msgs[lang_id][MSG_UIS_SPD0 + anim_speed], frame, colx, 22 + 80 );
 
   if (smenu.uiset.selector != UiSetSave)
     for (unsigned i = 0; i < 240; i += 16)
@@ -2043,6 +2058,158 @@ static const struct {
   #endif
 };
 
+// =========================================================================
+// Random Game Picker
+// =========================================================================
+
+static bool is_rom_ext(const char *path) {
+  unsigned l = strlen(path);
+  if (l < 4) return false;
+  if (!strcasecmp(&path[l-4], ".gba")) return true;
+  if (!strcasecmp(&path[l-3], ".gb"))  return true;
+  if (!strcasecmp(&path[l-4], ".gbc")) return true;
+  if (!strcasecmp(&path[l-4], ".nes")) return true;
+  if (!strcasecmp(&path[l-4], ".sms")) return true;
+  if (!strcasecmp(&path[l-3], ".gg"))  return true;
+  if (!strcasecmp(&path[l-3], ".sg"))  return true;
+  if (!strcasecmp(&path[l-3], ".sv"))  return true;
+  if (!strcasecmp(&path[l-4], ".ngc")) return true;
+  if (!strcasecmp(&path[l-4], ".pce")) return true;
+  return false;
+}
+
+// LCG pseudo-random: returns 0..(range-1)
+static unsigned random_range(unsigned range) {
+  smenu.random.randstate = smenu.random.randstate * 1103515245 + 12345;
+  return (smenu.random.randstate >> 16) % range;
+}
+
+static void random_load_batch() {
+  smenu.random.count = 0;
+  smenu.random.selector = 0;
+  smenu.random.loaded = false;
+
+  // Scan current directory for ROMs
+  DIR d;
+  if (FR_OK != f_opendir(&d, smenu.browser.cpath))
+    return;
+
+  // Collect ROM entries (up to 512)
+  struct { char name[48]; uint32_t size; bool isdir; } entries[512];
+  int total = 0;
+  FILINFO info;
+  while (total < 512 && f_readdir(&d, &info) == FR_OK && info.fname[0]) {
+    if (!(info.fattrib & AM_DIR) && is_rom_ext(info.fname)) {
+      strncpy(entries[total].name, info.fname, 47);
+      entries[total].name[47] = 0;
+      entries[total].size = (uint32_t)info.fsize;
+      entries[total].isdir = (info.fattrib & AM_DIR) ? true : false;
+      total++;
+    }
+  }
+  f_closedir(&d);
+
+  if (total == 0) return;
+
+  // Fisher-Yates shuffle and pick up to 7
+  int pick = total < 7 ? total : 7;
+  // Mark prev batch indices (store original positions before shuffle)
+  for (int i = total - 1; i > 0; i--) {
+    int j = random_range(i + 1);
+    // swap entries[i] and entries[j]
+    typeof(entries[0]) tmp = entries[i];
+    entries[i] = entries[j];
+    entries[j] = tmp;
+  }
+
+  // Try to avoid duplicates with previous batch
+  int selected = 0;
+  for (int i = 0; i < total && selected < pick; i++) {
+    bool dup = false;
+    for (int p = 0; p < 7; p++) {
+      if (smenu.random.prev_indices[p] >= 0 &&
+          !strcmp(entries[i].name, smenu.random.roms[p].name)) {
+        dup = true;
+        break;
+      }
+    }
+    if (dup && selected > 0) continue;  // skip duplicate only if we have some picks
+    strcpy(smenu.random.roms[selected].name, entries[i].name);
+    smenu.random.roms[selected].size = entries[i].size;
+    smenu.random.roms[selected].isdir = entries[i].isdir;
+    selected++;
+  }
+  smenu.random.count = selected;
+  smenu.random.loaded = true;
+
+  // Reset prev_indices
+  for (int i = 0; i < 7; i++)
+    smenu.random.prev_indices[i] = -1;
+}
+
+static void render_random(volatile uint8_t *frame) {
+  if (!smenu.random.loaded)
+    random_load_batch();
+
+  // Reload if in a new directory
+  static char last_path[MAX_FN_LEN] = "";
+  if (strcmp(last_path, smenu.browser.cpath)) {
+    strcpy(last_path, smenu.browser.cpath);
+    random_load_batch();
+  }
+
+  // 7 ROM rows + 1 refresh row = 8 rows, y from 16 to 144
+  for (int i = 0; i < smenu.random.count; i++) {
+    unsigned y = 32 + i * 16;
+    unsigned icon = guessicon(smenu.random.roms[i].name);
+    render_icon(2, y, icon);
+    draw_text_ovf(smenu.random.roms[i].name, frame, 20, y, 210);
+  }
+
+  // Empty message
+  if (smenu.random.count == 0)
+    draw_central_text(msgs[lang_id][MSG_RANDOM_EMPTY], frame, 120, 80);
+
+  // Refresh row at bottom
+  unsigned ry = 144;
+  draw_text_ovf(msgs[lang_id][MSG_RANDOM_REFRESH], frame, 16, ry, 200);
+
+  // Selection bar
+  int sel = smenu.random.selector;
+  if (sel < smenu.random.count)
+    render_icon_trans(0, 32 + sel * 16, 63);
+  else if (sel == 7)
+    render_icon_trans(0, ry, 63);
+}
+
+static void keypress_menu_random(unsigned newkeys) {
+  int maxopt = smenu.random.count > 0 ? 7 : 0;  // 0-6 roms, 7 refresh
+  int sel = smenu.random.selector;
+
+  if (newkeys & KEY_BUTTUP)
+    smenu.random.selector = MAX(0, sel - 1);
+  if (newkeys & KEY_BUTTDOWN)
+    smenu.random.selector = MIN(maxopt, sel + 1);
+
+  if (newkeys & KEY_BUTTA) {
+    if (sel == 7) {
+      random_load_batch();  // refresh
+    } else if (sel < smenu.random.count) {
+      // Build full path and open
+      char fullpath[MAX_FN_LEN];
+      npf_snprintf(fullpath, sizeof(fullpath), "%s/%s",
+                   smenu.browser.cpath, smenu.random.roms[sel].name);
+      browser_open(fullpath, smenu.random.roms[sel].size);
+    }
+  }
+
+  if (newkeys & KEY_BUTTB && sel < smenu.random.count) {
+    // B button does nothing for now
+  }
+}
+
+// =========================================================================
+
 // Renders the menu. Arg0 represents the frame count difference with the
 // previous rendered frame (for animations and similar stuff).
 void menu_render(unsigned fcnt) {
@@ -2052,13 +2219,21 @@ void menu_render(unsigned fcnt) {
   // Render the tab menu on top (rows 0..15), highlighting the selected option
   dma_memset16(&frame[0], dup8(FG_COLOR), SCREEN_WIDTH*16/2);
 
+  // Tab icon lookup: MENUTAB_RANDOM(6) maps to ICON_RANDOM (after INFO in enum)
+  static const uint8_t tab_icon[] = {
+    ICON_RECENT, ICON_DISK,
+#ifdef SUPPORT_NORGAMES
+    ICON_FLASH,
+#endif
+    ICON_RANDOM, ICON_SETTINGS, ICON_UILANG_SETTINGS, ICON_TOOLS, ICON_INFO,
+  };
   // Render icon bar
   int mintab = (recent_menu && smenu.recent.maxentries) ? MENUTAB_RECENT : MENUTAB_ROMBROWSE;
   for (unsigned i = mintab; i < MENUTAB_MAX; i++)
     if (i == smenu.menu_tab)
-      render_icon((i - mintab)*16, 0, i + ICON_RECENT);
+      render_icon((i - mintab)*16, 0, tab_icon[i]);
     else
-      render_icon_trans((i - mintab)*16, 0, i + ICON_RECENT);
+      render_icon_trans((i - mintab)*16, 0, tab_icon[i]);
 
   // Render the main area
   dma_memset16(&frame[16*SCREEN_WIDTH], dup8(BG_COLOR), SCREEN_WIDTH*(SCREEN_HEIGHT-16) / 2);
@@ -2077,6 +2252,7 @@ void menu_render(unsigned fcnt) {
         render_browser,
         #ifdef SUPPORT_NORGAMES
         render_flashbrowser,
+        render_random,
         #endif
         render_settings,
         render_ui_settings,
@@ -3016,6 +3192,8 @@ static void keypress_menu_uisettings(unsigned newkeys) {
       anim_speed = anim_speed ? anim_speed - 1 : 0;
     else if (smenu.uiset.selector == UiSetRect)
       recent_menu ^= 1;
+    else if (smenu.uiset.selector == UiSetRand)
+      random_menu ^= 1;
     else if (smenu.uiset.selector == UiSetLang)
       lang_id = (lang_id + LANG_COUNT - 1) % LANG_COUNT;
   }
@@ -3026,6 +3204,8 @@ static void keypress_menu_uisettings(unsigned newkeys) {
       anim_speed = MIN(animspd_cnt - 1, anim_speed + 1);
     else if (smenu.uiset.selector == UiSetRect)
       recent_menu ^= 1;
+    else if (smenu.uiset.selector == UiSetRand)
+      random_menu ^= 1;
     else if (smenu.uiset.selector == UiSetLang)
       lang_id = (lang_id + 1) % LANG_COUNT;
   }
@@ -3194,6 +3374,7 @@ void menu_keypress(unsigned newkeys) {
       keypress_menu_browse,
       #ifdef SUPPORT_NORGAMES
       keypress_menu_norbrowse,
+      keypress_menu_random,
       #endif
       keypress_menu_settings,
       keypress_menu_uisettings,

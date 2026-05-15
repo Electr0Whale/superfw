@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(grep \"^ENCODING 2[2-5][0-9]$\" \"d:/Download/superfw/wenquanyi_10pt.bdf\")"
+      "Bash(grep \"^ENCODING 2[2-5][0-9]$\" \"d:/Download/superfw/wenquanyi_10pt.bdf\")",
+      "Bash(git fetch *)",
+      "Bash(git ls-remote *)"
     ]
   }
 }

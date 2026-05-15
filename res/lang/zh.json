@@ -219,5 +219,9 @@
     "MSG_UIS_SPD2": "常规",
     "MSG_UIS_SPD3": "快",
     "MSG_UIS_SPD4": "非常快",
-    "MSG_STILLRTC": "静止"
+    "MSG_STILLRTC": "静止",
+    "MSG_UIS_RANDOM": "随机游戏",
+    "MSG_RANDOM_REFRESH": "换一批",
+    "MSG_RANDOM_EMPTY": "当前目录无ROM文件",
+    "MSG_FLASH_USAGE": "闪存使用量"
 }

@@ -31,6 +31,8 @@ Based on upstream v0.20 (251752e5), font replaced with WenQuanYi 10pt bitmap Son
 - 中文为默认 UI 语言 / Chinese as default UI language
 - 支持语言：中文 / 日本語 / English / Русский / Bahasa Indonesia / Bahasa Melayu
 - Fullwidth Forms、Geometric Shapes、CJK Compatibility 等字形块补全
+- **随机游戏页**：从当前目录随机选取 7 款 ROM，支持换一批，可在设置中启用/关闭
+- 合并 upstream PR #31（Flash 擦写优化，提速 25%）
 
 ## 截图 / Screenshots
 

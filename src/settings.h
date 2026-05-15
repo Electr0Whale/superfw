@@ -46,6 +46,7 @@ extern uint32_t menu_theme;
 extern uint32_t lang_id;
 extern uint32_t recent_menu;
 extern uint32_t anim_speed;
+extern uint32_t random_menu;
 
 // Defaults/Settings
 extern t_patch_policy patcher_default;
