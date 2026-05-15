@@ -43,7 +43,7 @@ extern unsigned has_rtc_support;
 extern unsigned ingame_menu_lang;
 extern uint32_t cheat_base_addr;
 extern uint32_t menu_anim_speed;
-extern uint16_t ingame_menu_palette[8];
+extern uint16_t ingame_menu_palette[4];
 extern uint32_t savefile_backups;                // Num of save backups to create
 extern uint32_t scratch_base, scratch_size;      // Space to write snapshots (in memory)
 extern uint32_t spill_addr;                      // Spill buffer that gets reloaded on IGM exit
@@ -52,15 +52,12 @@ extern char savestate_pattern[256];
 
 void reset_game();
 void reset_fw();
-void set_undef_lrsp(uint32_t, uint32_t);
+void set_undef_lr(uint32_t);
 uint32_t get_undef_lr(void);
-uint32_t get_undef_sp(void);
 void fast_mem_cpy_256(void *dst, const void *src, unsigned count);
 void fast_mem_clr_256(void *addr, uint32_t value, unsigned count);
 void set_entrypoint_hook(bool process_cheats);
 uint32_t *get_cheat_table();
-
-#define MAX_SPEED_OPTS      6   // Sync with common.h
 
 #define MAX_DISK_SLOTS      5
 #define MAX_MEM_SLOTS      32
@@ -69,7 +66,6 @@ uint32_t *get_cheat_table();
 #define BG_COLOR    17
 #define HI_COLOR    18
 #define SH_COLOR    19
-#define BL_COLOR    20
 #define ICON_PAL   128
 
 #define THREEDOTS_WIDTH      9
@@ -81,23 +77,19 @@ uint32_t *get_cheat_table();
 #define MEM_ICON             3
 #define MEM_ICON_DISABLED    4
 
-#define NOSELBAR           240
-
 #define MEM_VRAM_U8            (((volatile  uint8_t *) 0x06000000))
 #define MEM_ROM_U8             (((volatile  uint8_t *) 0x08000000))
 #define MEM_ROM_U16(off)       (((volatile  uint16_t *) (0x08000000 + (off))))
 
 static unsigned submenu;
 static unsigned copt;
-static t_dec_date rtc_date;
-static unsigned rtc_speed;
+static uint8_t rtc_values[5];
 static struct {
   const char *msg;
   void (*callback)();
   unsigned opt;
 } popup;
 static unsigned franim = 0;
-static unsigned selbarpos;
 
 const uint8_t animspd_lut[] = {
   2,    //  8 pix/second
@@ -155,7 +147,6 @@ void take_mem_snapshot(void *buffer) {
   fast_mem_cpy_256(save_ptr->ewram, spill_ptr->low_ewram, sizeof(spill_ptr->low_ewram));
   fast_mem_cpy_256(save_ptr->vram,  spill_ptr->low_vram,  sizeof(spill_ptr->low_vram));
   fast_mem_cpy_256(save_ptr->palette, spill_ptr->palette, sizeof(spill_ptr->palette));
-  fast_mem_cpy_256(save_ptr->oamem, spill_ptr->oam, sizeof(spill_ptr->oam));
 
   // Copy the remaining memory chunks (high segments)
   const uint8_t *IWRAM_BUF = (uint8_t*)0x03000000;
@@ -169,6 +160,9 @@ void take_mem_snapshot(void *buffer) {
   const uint8_t *VRAM_BUF = (uint8_t*)0x06000000;
   fast_mem_cpy_256(&save_ptr->vram[sizeof(spill_ptr->low_vram)], &VRAM_BUF[sizeof(spill_ptr->low_vram)],
                    96*1024 - sizeof(spill_ptr->low_vram));
+
+  const uint8_t *OARAM_BUF = (uint8_t*)0x07000000;
+  fast_mem_cpy_256(save_ptr->oamem, OARAM_BUF, sizeof(save_ptr->oamem));
 
   const uint8_t *IORAM_BUF = (uint8_t*)0x04000000;
   fast_mem_cpy_256(save_ptr->ioram, IORAM_BUF, sizeof(save_ptr->ioram));
@@ -282,7 +276,8 @@ bool writefd_mem_snapshot(FIL *fd) {
   if (!write_rom_buffer(fd, spill_ptr->palette, sizeof(spill_ptr->palette), tmp.buf))
     return false;
 
-  if (!write_rom_buffer(fd, spill_ptr->oam, sizeof(spill_ptr->oam), tmp.buf))
+  const uint8_t *OARAM_BUF = (uint8_t*)0x07000000;
+  if (FR_OK != f_write(fd, OARAM_BUF, 1024, &wrbytes) || wrbytes != 1024)
     return false;
 
   // VRAM, spilled, then actual data
@@ -337,7 +332,6 @@ bool load_mem_snapshot(const void *buffer) {
   fast_mem_cpy_256(spill_ptr->low_ewram, save_ptr->ewram, sizeof(spill_ptr->low_ewram));
   fast_mem_cpy_256(spill_ptr->low_vram,  save_ptr->vram,  sizeof(spill_ptr->low_vram));
   fast_mem_cpy_256(spill_ptr->palette, save_ptr->palette, sizeof(spill_ptr->palette));
-  fast_mem_cpy_256(spill_ptr->oam, save_ptr->oamem, sizeof(spill_ptr->oam));
 
   // Copy the remaining memory chunks (high segments)
   uint8_t *IWRAM_BUF = (uint8_t*)0x03000000;
@@ -351,6 +345,9 @@ bool load_mem_snapshot(const void *buffer) {
   uint8_t *VRAM_BUF = (uint8_t*)0x06000000;
   fast_mem_cpy_256(&VRAM_BUF[sizeof(spill_ptr->low_vram)], &save_ptr->vram[sizeof(spill_ptr->low_vram)],
                    96*1024 - sizeof(spill_ptr->low_vram));
+
+  uint8_t *OARAM_BUF = (uint8_t*)0x07000000;
+  fast_mem_cpy_256(OARAM_BUF, save_ptr->oamem, sizeof(save_ptr->oamem));
 
   // Write spilled-area I/O regs so they can be restored at menu-exit point.
   const t_iomap *saved_io = (t_iomap*)save_ptr->ioram;
@@ -493,10 +490,11 @@ bool readfd_mem_snapshot(FIL *fd) {
   if (!read_rom_buffer(fd, spill_ptr->palette, sizeof(spill_ptr->palette), tmp.buf))
     return false;
 
-  if (!read_rom_buffer(fd, spill_ptr->oam, sizeof(spill_ptr->oam), tmp.buf))
+  // Use aux function for OAM/VRAM since they don't take byte writes nicely.
+  uint8_t *OARAM_BUF = (uint8_t*)0x07000000;
+  if (!read_rom_buffer(fd, OARAM_BUF, 1024, tmp.buf))
     return false;
 
-  // Use aux function for OAM/VRAM since they don't take byte writes nicely.
   // VRAM, spilled, then actual data
   uint8_t *VRAM_BUF = (uint8_t*)0x06000000;
   const unsigned highsize = 96*1024 - sizeof(spill_ptr->low_vram);
@@ -583,7 +581,7 @@ void draw_popup(uint8_t *fb) {
   unsigned topy = popup.callback ? SCREEN_HEIGHT / 2 - 24 : SCREEN_HEIGHT / 2 - 16;
   unsigned boty = popup.callback ? SCREEN_HEIGHT / 2 + 24 : SCREEN_HEIGHT / 2 + 16;
 
-  memory_set16((uint16_t*)&fb[SCREEN_WIDTH * topy], dup8(FG_COLOR), SCREEN_WIDTH * (boty - topy) / 2);
+  memory_set16((uint16_t*)&fb[SCREEN_WIDTH * topy], FG_COLOR | (FG_COLOR << 8), SCREEN_WIDTH * (boty - topy) / 2);
   draw_hline(fb, 0, topy, SCREEN_WIDTH, HI_COLOR);
   draw_hline(fb, 0, boty - 2, SCREEN_WIDTH, HI_COLOR);
 
@@ -594,72 +592,59 @@ void draw_popup(uint8_t *fb) {
     unsigned cx = SCREEN_WIDTH / 3 * (2 - popup.opt) - font_width(msgs[ingame_menu_lang][IMENU_QC0_NO + popup.opt]) / 2;
     draw_text("▶", fb, cx - 10, topy + 24, HI_COLOR);
   }
-  selbarpos = NOSELBAR;   // Disable bar to ensure we do not overdraw
 }
 
 void draw_main_menu(uint8_t *fb, unsigned framen) {
   bool havess = num_mem_savestates || num_dsk_savestates;
-  draw_text(msgs[ingame_menu_lang][IMENU_MAIN0_BACK_GAME],  fb, 24, 36 + 19*0, HI_COLOR);
-  draw_text(msgs[ingame_menu_lang][IMENU_MAIN1_RESET],      fb, 24, 36 + 19*1, HI_COLOR);
-  draw_text(msgs[ingame_menu_lang][IMENU_MAIN2_FLUSH_SAVE], fb, 24, 36 + 19*2, !savefile_pattern[0] ? SH_COLOR : HI_COLOR);
-  draw_text(msgs[ingame_menu_lang][IMENU_MAIN3_SSTATE],     fb, 24, 36 + 19*3, !havess ? SH_COLOR : HI_COLOR);
-  draw_text(msgs[ingame_menu_lang][IMENU_MAIN4_RTC],        fb, 24, 36 + 19*4, !has_rtc_support ? SH_COLOR : HI_COLOR);
-  draw_text(msgs[ingame_menu_lang][IMENU_MAIN5_CHEATS],     fb, 24, 36 + 19*5, !cheat_base_addr ? SH_COLOR : HI_COLOR);
+  draw_text(msgs[ingame_menu_lang][IMENU_MAIN0_BACK_GAME],  fb, 30, 36 + 19*0, copt == 0 ? HI_COLOR : FG_COLOR);
+  draw_text(msgs[ingame_menu_lang][IMENU_MAIN1_RESET],      fb, 30, 36 + 19*1, copt == 1 ? HI_COLOR : FG_COLOR);
+  draw_text(msgs[ingame_menu_lang][IMENU_MAIN2_FLUSH_SAVE], fb, 30, 36 + 19*2, !savefile_pattern[0] ? SH_COLOR : (copt == 2 ? HI_COLOR : FG_COLOR));
+  draw_text(msgs[ingame_menu_lang][IMENU_MAIN3_SSTATE],     fb, 30, 36 + 19*3, !havess ? SH_COLOR : (copt == 3 ? HI_COLOR : FG_COLOR));
+  draw_text(msgs[ingame_menu_lang][IMENU_MAIN4_RTC],        fb, 30, 36 + 19*4, !has_rtc_support ? SH_COLOR : (copt == 4 ? HI_COLOR : FG_COLOR));
+  draw_text(msgs[ingame_menu_lang][IMENU_MAIN5_CHEATS],     fb, 30, 36 + 19*5, !cheat_base_addr ? SH_COLOR : (copt == 5 ? HI_COLOR : FG_COLOR));
 
-  selbarpos = 36 + 19*copt;
+  draw_text("▶", fb, 11, 36 + 19*copt, HI_COLOR);
 }
 
 void draw_reset_menu(uint8_t *fb, unsigned framen) {
   for (unsigned i = 0; i <= IMENU_RST2_DEVSKIP - IMENU_RST0_GAME; i++)
-    draw_text(msgs[ingame_menu_lang][IMENU_RST0_GAME + i],  fb, 24, 36 + 19*i, HI_COLOR);
-  draw_text(msgs[ingame_menu_lang][IMENU_GOBACK], fb, 24, 93, HI_COLOR);
+    draw_text(msgs[ingame_menu_lang][IMENU_RST0_GAME + i],  fb, 30, 36 + 19*i, copt == i ? HI_COLOR : FG_COLOR);
+  draw_text(msgs[ingame_menu_lang][IMENU_GOBACK], fb, 30, 95, copt == 3 ? HI_COLOR : FG_COLOR);
 
-  selbarpos = 36 + 19*copt;
+  draw_text("▶", fb, 11, 36 + 19*copt, HI_COLOR);
 }
 
 void draw_save_menu(uint8_t *fb, unsigned framen) {
   for (unsigned i = 0; i <= IMENU_SAVE2_RST - IMENU_SAVE0_OW; i++)
-    draw_text(msgs[ingame_menu_lang][i + IMENU_SAVE0_OW],  fb, 24, 36 + 19*i, HI_COLOR);
-  draw_text(msgs[ingame_menu_lang][IMENU_GOBACK], fb, 24, 93, HI_COLOR);
+    draw_text(msgs[ingame_menu_lang][i + IMENU_SAVE0_OW],  fb, 30, 36 + 19*i, copt == i ? HI_COLOR : FG_COLOR);
+  draw_text(msgs[ingame_menu_lang][IMENU_GOBACK], fb, 30, 96, copt == 3 ? HI_COLOR : FG_COLOR);
 
-  selbarpos = 36 + 19*copt;
+  draw_text("▶", fb, 11, 36 + 19*copt, HI_COLOR);
 }
 
 void draw_rtc_menu(uint8_t *fb, unsigned framen) {
-  char thour[3] = {'0' + rtc_date.hour/10, '0' + rtc_date.hour%10, 0};
-  char tmins[3] = {'0' + rtc_date.min /10, '0' + rtc_date.min%10, 0};
-  char tdays[3] = {'0' + rtc_date.day /10, '0' + rtc_date.day%10, 0};
-  char tmont[3] = {'0' + rtc_date.month/10, '0' + rtc_date.month%10, 0};
-  char tyear[5] = {'2', '0', '0' + rtc_date.year/10, '0' + rtc_date.year%10, 0};
+  unsigned hour = rtc_values[0];
+  unsigned mins = rtc_values[1];
+  unsigned days = rtc_values[2] + 1;
+  unsigned mont = rtc_values[3] + 1;
+  unsigned year = rtc_values[4];
 
-  draw_text(tyear, fb,  54, 56, HI_COLOR);
-  draw_text("-",   fb,  86, 56, HI_COLOR);
-  draw_text(tmont, fb,  95, 56, HI_COLOR);
-  draw_text("-",   fb, 111, 56, HI_COLOR);
-  draw_text(tdays, fb, 120, 56, HI_COLOR);
-  draw_text(thour, fb, 148, 56, HI_COLOR);
-  draw_text(":",   fb, 165, 56, HI_COLOR);
-  draw_text(tmins, fb, 170, 56, HI_COLOR);
+  char thour[3] = {'0' + hour/10, '0' + hour%10, 0};
+  char tmins[3] = {'0' + mins/10, '0' + mins%10, 0};
+  char tdays[3] = {'0' + days/10, '0' + days%10, 0};
+  char tmont[3] = {'0' + mont/10, '0' + mont%10, 0};
+  char tyear[5] = {'2', '0', '0' + year/10, '0' + year%10, 0};
 
-  if (copt < 5) {
-    const uint8_t cox[] = {
-      68, 103, 127, 156, 178
-    };
-    draw_text_center("▲", fb, cox[copt], 40, HI_COLOR);
-    draw_text_center("▼", fb, cox[copt], 70, HI_COLOR);
-  } else if (copt == 5) {
-    draw_text_center("▲", fb, SCREEN_WIDTH/2, 77, HI_COLOR);
-    draw_text_center("▼", fb, SCREEN_WIDTH/2, 107, HI_COLOR);
-  } else
-    selbarpos = 130;
+  draw_text(thour, fb,  40, 70, copt == 0 ? HI_COLOR : FG_COLOR);
+  draw_text(":",   fb,  60, 70, FG_COLOR);
+  draw_text(tmins, fb,  68, 70, copt == 1 ? HI_COLOR : FG_COLOR);
+  draw_text(tdays, fb, 110, 70, copt == 2 ? HI_COLOR : FG_COLOR);
+  draw_text("-",   fb, 130, 70, FG_COLOR);
+  draw_text(tmont, fb, 140, 70, copt == 3 ? HI_COLOR : FG_COLOR);
+  draw_text("-",   fb, 160, 70, FG_COLOR);
+  draw_text(tyear, fb, 170, 70, copt == 4 ? HI_COLOR : FG_COLOR);
 
-  char tmp[64];
-  npf_snprintf(tmp, sizeof(tmp), "%s: %s",
-    msgs[ingame_menu_lang][IMENU_RTCSPD],
-    msgs[ingame_menu_lang][rtc_speed ? (IMENU_SPD0 + rtc_speed - 1) : IMENU_FRZRTC]);
-  draw_text_center(tmp, fb, SCREEN_WIDTH/2, 92, HI_COLOR);
-
-  draw_text_center(msgs[ingame_menu_lang][IMENU_UPDAT_RTC], fb, SCREEN_WIDTH/2, 130, HI_COLOR);
+  draw_text_center(msgs[ingame_menu_lang][IMENU_UPDAT_RTC], fb, SCREEN_WIDTH/2, 120, copt == 5 ? HI_COLOR : FG_COLOR);
 }
 
 void draw_cheats_menu(uint8_t *fb, unsigned framen) {
@@ -674,16 +659,14 @@ void draw_cheats_menu(uint8_t *fb, unsigned framen) {
     off += sizeof(t_cheathdr) + e->slen + e->codelen;
 
     if (i >= soff) {
-      draw_text(e->enabled ? "☑" : "☐", fb, 9, 40 + 20 * numdisp, HI_COLOR);
+      draw_text(e->enabled ? "☑" : "☐", fb, 9, 40 + 20 *numdisp, copt == i ? HI_COLOR : FG_COLOR);
       if (copt == i)
         draw_text_ovf_rotate((char*)e->data, fb, 24, 40 + 20 *numdisp, 210, HI_COLOR);
       else
-        draw_text_ovf((char*)e->data, fb, 24, 40 + 20 *numdisp, 210, HI_COLOR);
+        draw_text_ovf((char*)e->data, fb, 24, 40 + 20 *numdisp, 210, FG_COLOR);
       numdisp++;
     }
   }
-
-  selbarpos = 40 + 20 * (copt - soff);
 }
 
 // Walks over the active cheats, produces a cheat table and updates
@@ -737,33 +720,40 @@ void draw_states_menu(uint8_t *fb, unsigned framen) {
 
   if (state_slot < 0) {
     npf_snprintf(tmp, sizeof(tmp), msgs[ingame_menu_lang][IMENU_SSTATE_PN], -state_slot);
-    draw_text_center(tmp,  fb, SCREEN_WIDTH / 2, 34, HI_COLOR);
+    draw_text_center(tmp,  fb, SCREEN_WIDTH / 2, 34, FG_COLOR);
 
     if (makepers >= 0) {
       copt = copt & 1;
-      draw_text_center(msgs[ingame_menu_lang][IMENU_MAKEPER], fb, SCREEN_WIDTH / 2, 95 + 18*0, HI_COLOR);
-      draw_text_center(msgs[ingame_menu_lang][IMENU_CANCEL],  fb, SCREEN_WIDTH / 2, 95 + 18*1, HI_COLOR);
+      draw_text_center(msgs[ingame_menu_lang][IMENU_MAKEPER], fb, SCREEN_WIDTH / 2, 95 + 18*0, copt == 0 ? HI_COLOR : FG_COLOR);
+      draw_text_center(msgs[ingame_menu_lang][IMENU_CANCEL],  fb, SCREEN_WIDTH / 2, 95 + 18*1, copt == 1 ? HI_COLOR : FG_COLOR);
     } else {
-      draw_text_center(msgs[ingame_menu_lang][IMENU_SSTATEP0_SAVE],  fb, SCREEN_WIDTH / 2, 95 + 18*0, HI_COLOR);
+      draw_text_center(msgs[ingame_menu_lang][IMENU_SSTATEP0_SAVE],  fb, SCREEN_WIDTH / 2, 95 + 18*0, copt == 0 ? HI_COLOR : FG_COLOR);
       draw_text_center(msgs[ingame_menu_lang][IMENU_SSTATEP1_LOAD],  fb, SCREEN_WIDTH / 2, 95 + 18*1,
-                       (diskslot_valid[-state_slot - 1] ? HI_COLOR : SH_COLOR));
+                       (copt == 1 ? HI_COLOR : (diskslot_valid[-state_slot - 1] ? FG_COLOR : SH_COLOR)));
       draw_text_center(msgs[ingame_menu_lang][IMENU_SSTATEP2_DEL],   fb, SCREEN_WIDTH / 2, 95 + 18*2,
-                       (diskslot_valid[-state_slot - 1] ? HI_COLOR : SH_COLOR));
+                       (copt == 2 ? HI_COLOR : (diskslot_valid[-state_slot - 1] ? FG_COLOR : SH_COLOR)));
     }
   } else {
     npf_snprintf(tmp, sizeof(tmp), msgs[ingame_menu_lang][IMENU_SSTATE_QN], state_slot + 1);
-    draw_text_center(tmp,  fb, SCREEN_WIDTH / 2, 34, HI_COLOR);
+    draw_text_center(tmp,  fb, SCREEN_WIDTH / 2, 34, FG_COLOR);
 
-    draw_text_center(msgs[ingame_menu_lang][IMENU_SSTATEQ0_SAVE],  fb, SCREEN_WIDTH / 2, 95 + 18*0, HI_COLOR);
+    draw_text_center(msgs[ingame_menu_lang][IMENU_SSTATEQ0_SAVE],  fb, SCREEN_WIDTH / 2, 95 + 18*0, copt == 0 ? HI_COLOR : FG_COLOR);
     draw_text_center(msgs[ingame_menu_lang][IMENU_SSTATEQ1_LOAD],  fb, SCREEN_WIDTH / 2, 95 + 18*1,
-                     (memslot_valid[state_slot] ? HI_COLOR : SH_COLOR));
+                     (copt == 1 ? HI_COLOR : (memslot_valid[state_slot] ? FG_COLOR : SH_COLOR)));
     draw_text_center(msgs[ingame_menu_lang][IMENU_SSTATEQ2_WRITE], fb, SCREEN_WIDTH / 2, 95 + 18*2,
-                     (memslot_valid[state_slot] ? HI_COLOR : SH_COLOR));
+                     (copt == 2 ? HI_COLOR : (memslot_valid[state_slot] ? FG_COLOR : SH_COLOR)));
   }
-
-  selbarpos = 95 + 18*copt;
 }
 
+
+void rtc_fix() {
+  // Correct any out of range values
+  rtc_values[0] %= 24;    // Hour
+  rtc_values[1] %= 60;    // Min
+  rtc_values[2] %= 31;    // Day
+  rtc_values[3] %= 12;    // Month
+  rtc_values[4] %= 100;   // Year
+}
 
 enum { MenuMain = 0, MenuReset = 1, MenuSave = 2, MenuSState = 3, MenuRTC = 4, MenuCheats = 5 };
 typedef void(*menu_draw_fn)(uint8_t *fb, unsigned framen);
@@ -1039,27 +1029,25 @@ void sstkey(uint16_t keyp) {
 }
 
 void rtckey(uint16_t keyp) {
+  static const uint8_t rtc_decv[] = { 23, 59, 30, 11, 99 };
+
   if (copt < 5) {
-    uint8_t *rval = (uint8_t*)&rtc_date;
     if (keyp & KEY_BUTTUP)
-      rval[copt]++;
+      rtc_values[copt]++;
     if (keyp & KEY_BUTTDOWN)
-      rval[copt]--;
+      rtc_values[copt] += rtc_decv[copt];
 
-    fixdate(&rtc_date);
-  } else if (copt == 5) {
-    if (keyp & KEY_BUTTUP)
-      rtc_speed++;
-    if (keyp & KEY_BUTTDOWN)
-      rtc_speed--;
-
-    rtc_speed = rtc_speed % MAX_SPEED_OPTS;
+    rtc_fix();
   }
 }
 
 bool action_write_rtc() {
-  // Write to the emulated RTC register
-  set_undef_lrsp(date2timestamp(&rtc_date), rtc_speed);
+  // Write to the GPIO buffer, assuming R/W mode!
+  set_undef_lr((rtc_values[0] <<  0) |
+               (rtc_values[1] <<  6) |
+               (rtc_values[2] << 12) |
+               (rtc_values[3] << 18) |
+               (rtc_values[4] << 24));
 
   submenu = MenuMain;
   copt = 0;
@@ -1100,7 +1088,6 @@ const menu_action_fn rtcacts[] = {
   NULL,
   NULL,
   NULL,
-  NULL,
   action_write_rtc,  // Apply RTC time.
 };
 
@@ -1126,16 +1113,15 @@ const t_menu_def menudata [] = {
   { draw_reset_menu,  resetacts,  NULL,   4, NULL,  true },
   { draw_save_menu,   saveacts,   NULL,   4, NULL,  true },
   { draw_states_menu, statesacts, sstkey, 3, NULL,  true },
-  { draw_rtc_menu,    rtcacts,    rtckey, 7, NULL, false },
+  { draw_rtc_menu,    rtcacts,    rtckey, 6, NULL, false },
   { draw_cheats_menu, cheatsacts, NULL,   0, cheats_cnt,  true },
 };
 
 void setup_video_frame() {
   // Setup video mode
-  REG_DISPCNT = 0x1444;   // Mode 4, BG2 + OBJs
-  REG_BGxCNT(2) = 0x80;   // 256 color mode
-  REG_BLDCNT = 0x1F40;    // Blending enabled (2nd target = all)
-  REG_BLDALPHA = 0x0808;  // 50% alpha
+  REG_DISPCNT = 0x404;   // Mode 4, BG2 no OBJs
+  REG_BGxCNT(2) = 0x80;  // 256 color mode
+  REG_BLDCNT = 0;        // No effects
   REG_BGxHOFS(2) = 0;
   REG_BGxVOFS(2) = 0;
 
@@ -1152,15 +1138,12 @@ void setup_video_frame() {
   MEM_PALETTE[BG_COLOR] = ingame_menu_palette[1];
   MEM_PALETTE[HI_COLOR] = ingame_menu_palette[2];
   MEM_PALETTE[SH_COLOR] = ingame_menu_palette[3];
-  MEM_PALETTE[256 + BL_COLOR] = ingame_menu_palette[4];
 
   memory_copy16((uint16_t*)&MEM_PALETTE[ICON_PAL], menu_icons_pal, sizeof(menu_icons_pal) >> 1);
   MEM_PALETTE[ICON_PAL] = MEM_PALETTE[BG_COLOR]; // Transparent color to BG color
 
-  // Initialize OAM (to display a selection bar)
-  fast_mem_clr_256((uint16_t*)MEM_OAM, 0, 1024);
-  // Fill selector object tile with some solid color.
-  fast_mem_clr_256((uint16_t*)&MEM_VRAM_OBJS[0], dup16(dup8(BL_COLOR)), 256);
+  // Clear two frames with BG color
+  fast_mem_clr_256((uint16_t*)MEM_VRAM_U8, dup16(dup8(BG_COLOR)), SCREEN_WIDTH * SCREEN_HEIGHT * 2);
 }
 
 void ingame_menu_blocked(uint32_t *use_cheats_hook) {
@@ -1218,9 +1201,13 @@ void ingame_menu_loop(uint32_t *use_cheats_hook) {
   num_mem_savestates = MIN(MAX_MEM_SLOTS, (scratch_size >> 10) / SAVESTATE_SIZE_KB);
   num_dsk_savestates = savestate_pattern[0] ? MAX_DISK_SLOTS : 0;
 
-  // Read RTC values and speed
-  timestamp2date(get_undef_lr(), &rtc_date);
-  rtc_speed = get_undef_sp();
+  // Read RTC values
+  uint32_t rval = get_undef_lr();
+  rtc_values[0] = (rval >>  0) & 0x3f;
+  rtc_values[1] = (rval >>  6) & 0x3f;
+  rtc_values[2] = (rval >> 12) & 0x3f;
+  rtc_values[3] = (rval >> 18) & 0x3f;
+  rtc_values[4] = (rval >> 24) & 0xff;
 
   // Lazy intialization of the SD card, to avoid blocking the menu
   FATFS fs;
@@ -1239,7 +1226,6 @@ void ingame_menu_loop(uint32_t *use_cheats_hook) {
     uint8_t *fb = (uint8_t*)&MEM_VRAM_U8[0xA000 * framen];
     fast_mem_clr_256((uint16_t*)fb, dup16(dup8(BG_COLOR)), SCREEN_WIDTH * SCREEN_HEIGHT);
     render_logo((uint16_t*)fb, SCREEN_WIDTH / 2, 20, 2);
-    selbarpos = NOSELBAR;
 
     // Render the current menu
     menudata[submenu].draw_fn(fb, framen);
@@ -1274,8 +1260,7 @@ void ingame_menu_loop(uint32_t *use_cheats_hook) {
         unsigned cbnum = menudata[submenu].opt_count ? copt : 0;
 
         set_supercard_mode(MAPPED_SDRAM, true, true);
-        const menu_action_fn cb = menudata[submenu].actions[cbnum];
-        bool retn = cb ? cb() : false;
+        bool retn = menudata[submenu].actions[cbnum]();
         set_supercard_mode(MAPPED_SDRAM, true, false);
         if (retn)
           break;
@@ -1303,13 +1288,6 @@ void ingame_menu_loop(uint32_t *use_cheats_hook) {
 
     // Wait for VBlank (with some leeway)
     while ((REG_VCOUNT & ~7) != 160);
-    // Update OAM
-    for (unsigned i = 0; i < 16; i++) {
-      MEM_OAM[i*4+0] = selbarpos | 0x2000 | 0x0400;   // Use 256 entries palette + transparency
-      MEM_OAM[i*4+1] = (i*16) | 0x4000;  // Size 16x16
-      MEM_OAM[i*4+2] = 512;    // OBJ numbers start at 512 for Mode 4
-    }
-
     // Flip frame
     REG_DISPCNT = (REG_DISPCNT & ~0x10) | (framen << 4);
   }
