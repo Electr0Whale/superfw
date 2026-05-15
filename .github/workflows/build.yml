@@ -63,5 +63,4 @@ jobs:
           tag_name: ci-${{ github.run_number }}
           files: out/*
           prerelease: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
