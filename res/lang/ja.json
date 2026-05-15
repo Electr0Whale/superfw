@@ -219,9 +219,5 @@
     "MSG_UIS_SPD2": "Regular",
     "MSG_UIS_SPD3": "Fast",
     "MSG_UIS_SPD4": "Very fast",
-    "MSG_STILLRTC": "Frozen",
-    "MSG_UIS_RANDOM": "ランダムゲーム",
-    "MSG_RANDOM_REFRESH": "更新",
-    "MSG_RANDOM_EMPTY": "ROMが見つかりません",
-    "MSG_FLASH_USAGE": "フラッシュ使用量"
+    "MSG_STILLRTC": "Frozen"
 }

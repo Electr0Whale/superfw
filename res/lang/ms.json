@@ -219,9 +219,5 @@
     "MSG_UIS_SPD2": "Biasa",
     "MSG_UIS_SPD3": "Laju",
     "MSG_UIS_SPD4": "Amat laju",
-    "MSG_STILLRTC": "Frozen",
-    "MSG_UIS_RANDOM": "Permainan Rawak",
-    "MSG_RANDOM_REFRESH": "Muat Semula",
-    "MSG_RANDOM_EMPTY": "Tiada ROM",
-    "MSG_FLASH_USAGE": "Penggunaan Flash"
+    "MSG_STILLRTC": "Frozen"
 }

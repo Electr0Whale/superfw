@@ -66,7 +66,6 @@ uint32_t menu_theme = 0;
 uint32_t lang_id = 1;  // zh (Chinese) as default
 uint32_t recent_menu = 1;
 uint32_t anim_speed = animspd_cnt / 2;
-uint32_t random_menu = 0;
 
 // Default settings
 t_patch_policy patcher_default = PatchAuto;
@@ -109,9 +108,8 @@ bool save_ui_settings() {
     "menu_theme=%lu\n"
     "langcode=%c%c\n"
     "recent_menu=%lu\n"
-    "anim_speed=%lu\n"
-    "random_menu=%lu\n",
-    menu_theme, (lc & 0xFF), (lc >> 8), recent_menu, anim_speed, random_menu);
+    "anim_speed=%lu\n",
+    menu_theme, (lc & 0xFF), (lc >> 8), recent_menu, anim_speed);
 
   UINT wrbytes;
   FRESULT res = f_write(&fd, buf, strlen(buf), &wrbytes);
@@ -212,8 +210,6 @@ static void parse_ui_settings(void *usr, const char *var, const char *value) {
     recent_menu = valu;
   else if (!strcmp(var, "anim_speed"))
     anim_speed = valu;
-  else if (!strcmp(var, "random_menu"))
-    random_menu = valu;
   else if (!strcmp(var, "langcode")) {
     uint16_t code = ((uint8_t)value[0]) | (((uint8_t)value[1]) << 8);
     lang_id = lang_lookup(code);

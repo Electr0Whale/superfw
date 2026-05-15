@@ -219,9 +219,5 @@
     "MSG_UIS_SPD2": "Biasa",
     "MSG_UIS_SPD3": "Cepat",
     "MSG_UIS_SPD4": "Amat cepat",
-    "MSG_STILLRTC": "Frozen",
-    "MSG_UIS_RANDOM": "Game Acak",
-    "MSG_RANDOM_REFRESH": "Segarkan",
-    "MSG_RANDOM_EMPTY": "Tidak ada ROM",
-    "MSG_FLASH_USAGE": "Penggunaan Flash"
+    "MSG_STILLRTC": "Frozen"
 }

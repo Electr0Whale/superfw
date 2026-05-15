@@ -219,9 +219,5 @@
     "MSG_UIS_SPD2": "Обычно",
     "MSG_UIS_SPD3": "Быстро",
     "MSG_UIS_SPD4": "Оч. быстро",
-    "MSG_STILLRTC": "Заморожено",
-    "MSG_UIS_RANDOM": "Случ. игры",
-    "MSG_RANDOM_REFRESH": "Обновить",
-    "MSG_RANDOM_EMPTY": "Нет ROM в папке",
-    "MSG_FLASH_USAGE": "Исп. флеш"
+    "MSG_STILLRTC": "Заморожено"
 }
