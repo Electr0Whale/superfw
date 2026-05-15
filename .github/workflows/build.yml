@@ -29,13 +29,26 @@ jobs:
           python3 res/fonts/pack_to_carray.py /tmp/embed.pack > src/fonts/font_embed.h
           cp res/fonts.pack res/fonts-ext.pack
 
-      - name: Build Chis firmware
+      - name: Build Chis (hardware)
         run: |
           git submodule update --init apultra
           make -j$(nproc) BOARD=chis BUNDLE_GBC_EMULATOR=0 BUNDLE_OTHER_EMULATORS=0
+          cp superfw.gba superfw-chis.gba
 
-      - name: Upload artifact
+      - name: Build Chis (emulator)
+        run: |
+          rm -f *.gba *.elf *.payload *.map
+          make -j$(nproc) BOARD=chis NO_SD_MODE=1 BUNDLE_GBC_EMULATOR=0 BUNDLE_OTHER_EMULATORS=0
+          mv superfw.gba superfw-emu.gba
+
+      - name: Upload Chis hardware
         uses: actions/upload-artifact@v4
         with:
-          name: superfw-chis-wqy10pt
-          path: superfw.gba
+          name: superfw-chis
+          path: superfw-chis.gba
+
+      - name: Upload Chis emulator
+        uses: actions/upload-artifact@v4
+        with:
+          name: superfw-chis-emu
+          path: superfw-emu.gba
