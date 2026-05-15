@@ -35,8 +35,7 @@
 //
 //   I/O regs + CPU regs  (partial reg dump only)
 //   Palette RAM (1KB)
-//   OAM RAM (1KB)
-//   VRAM (first 81KB)
+//   VRAM (first 80KB)
 //   IWRAM (first 16KB)
 //   EWRAM (first 62KB)
 //
@@ -122,7 +121,7 @@ scratch_base:          .word 0x0    // Buffer reserved for scratch space.
 scratch_size:          .word 0x0
 has_rtc_support:       .word 0x0    // Filled with a boolean to allow tweaking RTC values
 menu_anim_speed:       .word 0x0    // Menu animation speed
-ingame_menu_palette:   .fill 8,2,0  // Filled with background, foreground and select colors
+ingame_menu_palette:   .fill 4,2,0  // Filled with background, foreground and select colors
 savefile_backups:      .word 0x0    // Fill the number of backups to preserve.
 
 savefile_pattern:      .fill 256, 1, 0          // File name pattern (NULL terminated)
@@ -315,12 +314,8 @@ ingame_menu_entry:
 
   msr cpsr, r2                           // Restore original mode/cpsr
 
-  // Copy Palette, OAM and VRAM to the spill area
+  // Copy Palette and VRAM to the spill area (OAM is preserved since unused)
   mov r0, $0x05000000
-  mov r2, $(1024 / 8 / 4)
-  bl do_spill_data
-
-  mov r0, $0x07000000
   mov r2, $(1024 / 8 / 4)
   bl do_spill_data
 
@@ -386,12 +381,8 @@ ingame_menu_entry:
   ldr r1, spill_addr
   add r1, $(8 + 8 + 16 + 2+2 + 64 + 64)   // Skip register save to RAM buffers.
 
-  // Restore palette and OAM
+  // Restore palette
   mov r0, $0x05000000
-  mov r2, $(1024 / 8 / 4)
-  bl restore_spill_data
-
-  mov r0, $0x07000000
   mov r2, $(1024 / 8 / 4)
   bl restore_spill_data
 
@@ -474,18 +465,11 @@ ingame_menu_entry:
     ldr r3, [r1, #(64 + 4 + off*12 + 8)]; \
     msr spsr, r3;
 
-  // These modes are never used really.
-  #define reload_part_regs(mode, off)     \
-    mov r0, $(0xC0 | (mode));             \
-    msr cpsr_c, r0;                       \
-    ldr r3, [r1, #(64 + 4 + off*12 + 8)]; \
-    msr spsr, r3;
-
-  reload_regs(0x12, 0);              // IRQ mode
-  reload_regs(0x11, 1);              // FIQ mode
-  reload_regs(0x13, 2);              // supervisor mode
-  reload_part_regs(0x17, 3);         // abort mode
-  reload_part_regs(0x1B, 4);         // undefined mode
+  reload_regs(0x12, 0);              // SPSR IRQ mode
+  reload_regs(0x11, 1);              // SPSR FIQ mode
+  reload_regs(0x13, 2);              // SPSR supervisor mode
+  reload_regs(0x17, 3);              // SPSR abort mode
+  reload_regs(0x1B, 4);              // SPSR undefined mode
 
   ldr r3, [r1, #(64 + 0)]            // CPSR (IRQ mode)
   msr cpsr, r3                       // Load CPSR, changes to IRQ mode too.
@@ -643,11 +627,10 @@ read_sdmutex:
 
 
 // Writes the LR register for CPU undef mode (RTC register)
-def_function(set_undef_lrsp):
+def_function(set_undef_lr):
   mrs r2, CPSR         // Save the current CPSR
   msr CPSR_c, $0x9B    // Move to undefined mode (no IRQs)
   mov lr, r0           // Store in UNDEF[LR]
-  mov sp, r1           // Store in UNDEF[SP]
   msr CPSR_c, r2       // Restore original model and CPSR
   bx lr
 
@@ -655,13 +638,6 @@ def_function(get_undef_lr):
   mrs r2, CPSR         // Save the current CPSR
   msr CPSR_c, $0x9B    // Move to undefined mode (no IRQs)
   mov r0, lr           // Read UNDEF[LR]
-  msr CPSR_c, r2       // Restore original model and CPSR
-  bx lr
-
-def_function(get_undef_sp):
-  mrs r2, CPSR         // Save the current CPSR
-  msr CPSR_c, $0x9B    // Move to undefined mode (no IRQs)
-  mov r0, sp           // Read UNDEF[SP]
   msr CPSR_c, r2       // Restore original model and CPSR
   bx lr
 

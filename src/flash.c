@@ -22,13 +22,10 @@
 #include "common.h"
 #include "util.h"
 #include "sha256.h"
-#include "gbahw.h"
 #include "supercard_driver.h"
 
 // Supercard internal flash routines
 // Assumes the code runs from IW/EWRAM!
-
-#define SECTOR_ERASE_TIMEOUTMS     4000    // ~4s timeout for 1 sector erase.
 
 // Supercard's internal flash is a regular 512KiB flash, mapped to
 // 0x08000000 (whenever the CPLD is not mapping the SDRAM of course).
@@ -181,14 +178,19 @@ bool flash_check_erased(uintptr_t addr, unsigned size) {
   FLASH_WE_MODE();
 
   // Checks for all ones!
-  int iserased = check_erased_32xff((void*)addr, size / 32);
+  for (unsigned i = 0; i < size; i += 2) {
+    if (*(volatile uint16_t*)(addr + i) != 0xffff) {
+      set_supercard_mode(MAPPED_SDRAM, true, true);
+      return false;
+    }
+  }
 
   set_supercard_mode(MAPPED_SDRAM, true, true);
-  return iserased;
+  return true;
 }
 
-// Performs a flash sector erase.
-bool flash_erase_sector(uintptr_t addr) {
+// Starts a flash sector erase operation without waiting for completion.
+void flash_erase_sector_start(uintptr_t addr) {
   FLASH_WE_MODE();
 
   // Reset any previous command that might be ongoing.
@@ -202,12 +204,31 @@ bool flash_erase_sector(uintptr_t addr) {
   SLOT2_BASE_U16[addr_perm(0x2AA)] = 0x0055;
 
   *(volatile uint16_t*)(addr) = 0x0030; // Erase sector
+  
+  // Don't wait, just return to allow background erase
+  set_supercard_mode(MAPPED_SDRAM, true, true);
+}
 
+// Checks if a flash erase/program operation is complete.
+// Returns true if complete, false if still in progress.
+bool flash_operation_complete() {
+  FLASH_WE_MODE();
+  // Check Q6 toggling - if it's stable, operation is complete
+  uint16_t a = SLOT2_BASE_U16[0];
+  uint16_t b = SLOT2_BASE_U16[0];
+  set_supercard_mode(MAPPED_SDRAM, true, true);
+  return (a == b);
+}
+
+// Waits for flash operation to complete and finalizes it.
+// Returns true on success, false on timeout.
+bool flash_operation_wait() {
+  FLASH_WE_MODE();
   // Wait for the erase operation to finish. We rely on Q6 toggling:
-  for (uint32_t to = systime() + SECTOR_ERASE_TIMEOUTMS; systime() < to; ) {
-    wait_ms(4);    // Wait for a bit, erase can take a while.
+  for (unsigned i = 0; i < 60*100; i++) {
     if (SLOT2_BASE_U16[0] == SLOT2_BASE_U16[0])
       break;
+    wait_ms(10);    // Wait for a bit, erase can take a while.
   }
   bool retok = (SLOT2_BASE_U16[0] == SLOT2_BASE_U16[0]);
 
@@ -218,6 +239,12 @@ bool flash_erase_sector(uintptr_t addr) {
   return retok;
 }
 
+// Performs a flash sector erase (blocking version).
+bool flash_erase_sector(uintptr_t addr) {
+  flash_erase_sector_start(addr);
+  return flash_operation_wait();
+}
+
 // Deletes a bunch of sectors of a given size.
 bool flash_erase_sectors(uint32_t baseaddr, unsigned sectsize, unsigned sectcount) {
   for (unsigned i = 0; i < sectcount; i++) {
@@ -226,70 +253,6 @@ bool flash_erase_sectors(uint32_t baseaddr, unsigned sectsize, unsigned sectcoun
   }
   return true;
 }
-
-void flash_erase_fsm_start(t_flash_erase_state *st, uint32_t baseaddr, unsigned sectsize, unsigned sectorcnt) {
-  st->baseaddr = baseaddr;
-  st->sectorsize = sectsize;
-  st->sectorcount = sectorcnt;
-  st->currsect = 0;
-  st->timeout = 0;
-}
-
-int flash_erase_fsm_step(t_flash_erase_state *st) {
-  if (st->currsect & 0x80000000) {
-    // Check if the erasing operation is done.
-    FLASH_WE_MODE();
-    bool complete = (SLOT2_BASE_U16[0] == SLOT2_BASE_U16[0]);
-
-    if (complete) {
-      for (unsigned i = 0; i < 32; i++)
-        SLOT2_BASE_U16[0] = 0x00F0;            // Reset for a few cycles
-
-      st->currsect = (st->currsect & 0x7FFFFFFF) + 1;
-      set_supercard_mode(MAPPED_SDRAM, true, true);
-
-      return flash_erase_fsm_step(st);     // Start the next erase operation!
-    }
-    else if (systime() > st->timeout) {
-      set_supercard_mode(MAPPED_SDRAM, true, true);
-      return -1;   // Error timeout.
-    }
-  } else {
-    while (1) {
-      // Check for task completion
-      if (st->currsect >= st->sectorcount)
-        return 1;
-
-      // Skip any sectors that are completely erased.
-      if (flash_check_erased(st->baseaddr + st->currsect * st->sectorsize, st->sectorsize))
-        st->currsect++;
-      else
-        break;
-    }
-
-    // Start wiping the current sector.
-    FLASH_WE_MODE();
-
-    for (unsigned i = 0; i < 32; i++)
-      SLOT2_BASE_U16[0] = 0x00F0;
-
-    SLOT2_BASE_U16[addr_perm(0x555)] = 0x00AA;
-    SLOT2_BASE_U16[addr_perm(0x2AA)] = 0x0055;
-    SLOT2_BASE_U16[addr_perm(0x555)] = 0x0080; // Erase command
-    SLOT2_BASE_U16[addr_perm(0x555)] = 0x00AA;
-    SLOT2_BASE_U16[addr_perm(0x2AA)] = 0x0055;
-
-    *(volatile uint16_t*)(st->baseaddr + st->currsect * st->sectorsize) = 0x0030; // Erase sector
-    wait_ms(1);
-
-    st->currsect |= 0x80000000;
-    st->timeout = systime() + SECTOR_ERASE_TIMEOUTMS;
-  }
-
-  set_supercard_mode(MAPPED_SDRAM, true, true);
-  return 0; // Work in progress
-}
-
 
 // Programs the built-in flash memory, assumes memory was cleared.
 // Also uses temporary buffers to allow for SDRAM buffers too.
@@ -342,43 +305,52 @@ bool flash_program_buffered(uint32_t baseaddr, const uint8_t *buf, unsigned size
   SLOT2_BASE_U16[0] = 0x00F0;
   const unsigned wrsize = MIN(bufsize, 512);
 
-  for (unsigned i = 0; i < size; i += 512) {
-    union {
-      uint16_t b16[256];
-      uint32_t b32[128];
-    } tmp;
+  // Allocate buffer based on wrsize
+  uint16_t tmp[256];
+
+  // Prefetch first block
+  if (size > 0) {
     set_supercard_mode(MAPPED_SDRAM, true, true);
-    dma_memcpy32(tmp.b32, &buf[i], sizeof(tmp) / 4);
-    FLASH_WE_MODE();
+    unsigned first_size = MIN(wrsize, size);
+    memcpy(tmp, buf, first_size);
+  }
 
-    for (unsigned off = 0; off < 512 && i+off < size; off += wrsize) {
-      const uint32_t toff = (i + off);
-      const uint16_t bcnt = MIN(wrsize, size - toff);
-      volatile uint16_t *ptr = (uint16_t*)(baseaddr + toff);
+  FLASH_WE_MODE();
+  for (unsigned i = 0; i < size; i += wrsize) {
+    const uint16_t bcnt = MIN(wrsize, size - i);
+    volatile uint16_t *ptr = (uint16_t*)(baseaddr + i);
 
-      SLOT2_BASE_U16[addr_perm(0x555)]  = 0x00AA;
-      SLOT2_BASE_U16[addr_perm(0x2AA)]  = 0x0055;
-      *ptr = 0x0025;        // Write buffer command
-      *ptr = bcnt / 2 - 1;  // Word count
+    SLOT2_BASE_U16[addr_perm(0x555)]  = 0x00AA;
+    SLOT2_BASE_U16[addr_perm(0x2AA)]  = 0x0055;
+    *ptr = 0x0025;        // Write buffer command
+    *ptr = bcnt / 2 - 1;  // Word count
 
-      for (unsigned j = 0; j < bcnt / 2; j++)
-        *ptr++ = tmp.b16[off/2+j];
+    for (unsigned j = 0; j < bcnt / 2; j++)
+      *ptr++ = tmp[j];
 
-      *(ptr-1) = 0x29;     // Confirm write buffer operation.
+    *(ptr-1) = 0x29;     // Confirm write buffer operation.
 
-      // Wait a bit for the operation to finish.
-      for (unsigned j = 0; j < 32*1024; j++) {
-        if (SLOT2_BASE_U16[0] == SLOT2_BASE_U16[0])
-          break;
-      }
-      bool notfinished = (SLOT2_BASE_U16[0] != SLOT2_BASE_U16[0]);
-      SLOT2_BASE_U16[0] = 0x00F0;   // Finish operation.
+    // Prefetch next block while waiting for write to complete
+    unsigned next_i = i + wrsize;
+    if (next_i < size) {
+      set_supercard_mode(MAPPED_SDRAM, true, true);
+      unsigned next_size = MIN(wrsize, size - next_i);
+      memcpy(tmp, &buf[next_i], next_size);
+      FLASH_WE_MODE();
+    }
 
-      // Timed out or the value programmed is wrong
-      if (notfinished) {
-        set_supercard_mode(MAPPED_SDRAM, true, true);
-        return false;
-      }
+    // Now wait for the write operation to finish
+    for (unsigned j = 0; j < 32*1024; j++) {
+      if (SLOT2_BASE_U16[0] == SLOT2_BASE_U16[0])
+        break;
+    }
+    bool notfinished = (SLOT2_BASE_U16[0] != SLOT2_BASE_U16[0]);
+    SLOT2_BASE_U16[0] = 0x00F0;   // Finish operation.
+
+    // Timed out or the value programmed is wrong
+    if (notfinished) {
+      set_supercard_mode(MAPPED_SDRAM, true, true);
+      return false;
     }
   }
 
@@ -425,54 +397,40 @@ bool flash_verify(uint32_t baseaddr, const uint8_t *buf, unsigned size) {
   return true;
 }
 
-typedef struct {
-  uint8_t  rom_head[192];
-  uint32_t branch_op;
-  uint32_t version;
-  uint32_t git_version;
-  uint32_t fw_size;
-  uint8_t  hw_variant[4];
-  uint8_t  fw_variant[4];
-  uint8_t  pad[8];
-  uint8_t  checksum[16];     // Truncated sha256 checksum
-  uint8_t  magic[16];        // SUPERFW~DAVIDGF
-} t_superfw_header;
+
+#define FW_VERSION_OFFSET       0xC4
+#define FW_GITVERS_OFFSET       0xC8
+#define FW_IMGSIZE_OFFSET       0xCC
+#define FW_IMGHASH_OFFSET       0xD0
+#define FW_MAGICSG_OFFSET       0xF0
+
+#define FW_IMGHASH_SIZE         32
 
 // Validates a superFW image header
 bool check_superfw(const uint8_t *h, uint32_t *ver) {
-  const t_superfw_header *header = (t_superfw_header*)h;
-
-  if (memcmp(header->magic, "SUPERFW~DAVIDGF", 16))
+  if (memcmp(&h[FW_MAGICSG_OFFSET], "SUPERFW~DAVIDGF", 16))
     return false;
   if (ver)
-    *ver = header->version;
+    *ver = parse32le(&h[FW_VERSION_OFFSET]);
   return true;
 }
 
-bool validate_superfw_variant(const uint8_t *fw) {
-  const t_superfw_header *header = (t_superfw_header*)fw;
-  return !strncmp((char*)header->hw_variant, FW_FLAVOUR, 4);
-}
-
 bool validate_superfw_checksum(const uint8_t *fw, unsigned fwsize) {
-  const t_superfw_header *header = (t_superfw_header*)fw;
-
   // Check that the file size matches the advertized size in the header
-  uint32_t hsize = header->fw_size;
-
+  uint32_t hsize = parse32le(&fw[FW_IMGSIZE_OFFSET]);
   if (hsize != fwsize || fwsize < 256)
     return false;
 
   // Calculate the SH256 checksum on a zero-ed checksum field.
-  uint8_t hash[32] = {0};
+  uint8_t hash[FW_IMGHASH_SIZE] = {0};
   SHA256_State st;
   sha256_init(&st);
-  sha256_transform(&st, &fw[0], offsetof(t_superfw_header, checksum));
-  sha256_transform(&st, hash, sizeof(header->checksum));
-  sha256_transform(&st, &fw[offsetof(t_superfw_header, magic)], fwsize - offsetof(t_superfw_header, magic));
+  sha256_transform(&st, &fw[0], FW_IMGHASH_OFFSET);
+  sha256_transform(&st, hash, sizeof(hash));
+  sha256_transform(&st, &fw[FW_MAGICSG_OFFSET], fwsize - FW_MAGICSG_OFFSET);
   sha256_finalize(&st, hash);
 
-  if (memcmp(header->checksum, hash, sizeof(header->checksum)))
+  if (memcmp(&fw[FW_IMGHASH_OFFSET], hash, sizeof(hash)))
     return false;
 
   return true;

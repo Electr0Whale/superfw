@@ -42,8 +42,8 @@
 #define GBA_ROM_ADDR32(addr, value)   *((volatile uint32_t *)(0x08000000 + addr)) = (value)
 
 // The firmware block (#0) is mapped to the last 4MiB block, plus its offset.
-#define FLASH_DIRSAV_PAYLOAD_W0       (0x0A000000 - NOR_BLOCK_SIZE + 0x00190000)
-#define FLASH_IGM_TRAMPOLINE_W0       (0x0A000000 - NOR_BLOCK_SIZE + 0x00198000)
+#define FLASH_DIRSAV_PAYLOAD_W0       (0x0A000000 - NOR_BLOCK_SIZE + 0x00140000)
+#define FLASH_IGM_TRAMPOLINE_W0       (0x0A000000 - NOR_BLOCK_SIZE + 0x00150000)
 
 #define ING_PALETTE_BASE    240
 
@@ -150,8 +150,10 @@ void load_ingame_menu(
   igm->scratch_space_size = total_size - (menu_size + fontsz + cheats);
   igm->menu_has_rtc_support = rtc_patches;    // Using RTC patches
   igm->savefile_backups = backup_sram_default;// Backup count
-  for (unsigned i = 0; i < sizeof(igm->menu_palette) / sizeof(igm->menu_palette[0]); i++)
-    igm->menu_palette[i] = MEM_PALETTE[ING_PALETTE_BASE + i];
+  igm->menu_palette[0] = MEM_PALETTE[ING_PALETTE_BASE];
+  igm->menu_palette[1] = MEM_PALETTE[ING_PALETTE_BASE + 1];
+  igm->menu_palette[2] = MEM_PALETTE[ING_PALETTE_BASE + 2];
+  igm->menu_palette[3] = MEM_PALETTE[ING_PALETTE_BASE + 3];
 
   if (savefn)
     memcpy32(igm->savefile_pattern, savefn, sizeof(igm->savefile_pattern));
@@ -183,8 +185,12 @@ void load_directsave_config(const t_dirsave_info *dsinfo) {
   write_sram_buffer((uint8_t*)(&cfg), 64*1024 - sizeof(cfg), sizeof(cfg));
 }
 
-void load_rtcclock_data(const t_rtc_info *rtcinfo) {
-  set_undef_lrsp(rtcinfo->timestamp, rtcinfo->ts_step);
+void load_rtcclock_data(const t_rtc_state *rtc_clock) {
+  set_undef_lr((rtc_clock->hour <<  0) |
+               (rtc_clock->mins <<  6) |
+               (rtc_clock->day  << 12) |
+               (rtc_clock->month<< 18) |
+               (rtc_clock->year << 24));
 }
 
 // Loads ROM header from disk for inspection.
@@ -207,12 +213,12 @@ unsigned load_gba_rom(
   const t_patch *ptch,
   const t_dirsave_info *dsinfo,
   bool ingame_menu,
-  const t_rtc_info *rtcinfo,
+  const t_rtc_state *rtc_clock,
   unsigned cheats,
   progress_fn progress
 ) {
 
-  bool use_rtc_patches = rtcinfo != NULL;
+  bool use_rtc_patches = rtc_clock != NULL;
 
   // Determine how much ROM space we need for the IGM and DirSav payloads
   const unsigned igm_reqsz = ingame_menu_payload.menu_rsize + font_block_size();
@@ -273,18 +279,13 @@ unsigned load_gba_rom(
   if (res != FR_OK)
     return ERR_LOAD_BADROM;
 
-  // Calculate progress bar steps, carefully consider the gap (if any).
-  const uint32_t load_steps = (gap_end <= fs  ? (fs - (gap_end - gap_start)) :
-                               gap_start < fs ? (fs - gap_start)             : fs) / LOAD_BS;
-  uint32_t steps = 0;
-
   // Honor fast loading (switch mirror if appropriate)
   slowsd = use_slowld;
 
   uint8_t *ptr = (uint8_t*)(GBA_ROM_ADDR);
-  for (uint32_t offset = 0; offset < gap_start; offset += LOAD_BS, steps++) {
-    if (progress && (steps & (31)) == 0)
-      progress(steps, load_steps);
+  for (uint32_t offset = 0; offset < gap_start; offset += LOAD_BS) {
+    if (progress && (offset & (256*1024-1)) == 0)
+      progress(offset >> 8, fs >> 8);
 
     unsigned toread = MIN(LOAD_BS, gap_start - offset);
     UINT rdbytes;
@@ -302,15 +303,9 @@ unsigned load_gba_rom(
       dma_memcpy32(&ptr[offset], tmp, toread/4);
     set_supercard_mode(MAPPED_SDRAM, true, true);
   }
-  // Skip over the gap
-  if (FR_OK != f_lseek(&fd, gap_end)) {
-    slowsd = true;
-    f_close(&fd);
-    return ERR_LOAD_BADROM;
-  }
-  for (uint32_t offset = gap_end; offset < fs; offset += LOAD_BS, steps++) {
-    if (progress && (steps & (31)) == 0)
-      progress(steps, load_steps);
+  for (uint32_t offset = gap_end; offset < fs; offset += LOAD_BS) {
+    if (progress && (offset & (256*1024-1)) == 0)
+      progress(offset >> 8, fs >> 8);
 
     unsigned toread = MIN(LOAD_BS, fs - offset);
     UINT rdbytes;
@@ -346,8 +341,8 @@ unsigned load_gba_rom(
   if (ptch) {
     patch_apply_rom(GBA_ROM_ADDR, MAX_GBA_ROM_SIZE, 0, true, ptch, use_rtc_patches,
                     ingame_menu ? igm_addr : 0, dsinfo ? ds_addr : 0);
-    if (rtcinfo)
-      load_rtcclock_data(rtcinfo);
+    if (rtc_clock)
+      load_rtcclock_data(rtc_clock);
   }
 
   // Fix header checksum unconditionally (just in case we boot to BIOS).
@@ -398,20 +393,15 @@ unsigned flash_gba_nor(
   // Map the game to the base 32MiB address space.
   set_superchis_normap(blkmap);
 
-  t_flash_erase_state erst;
-  for (uint32_t bigoff = 0; bigoff < fs; bigoff += ssize) {
-    // Start clearing the flash block we will be writing to!
-    flash_erase_fsm_start(&erst, GBA_ROM_BASE_WS1 + bigoff, flashinfo.blksize, ssize / flashinfo.blksize);
+  bool erase_pending = false;
+  uint32_t erase_sector_offset = 0;  // Track which sector we've started erasing
 
-    // Load the ROM in chunks to the scratch area. So that we can mange it.
+  for (uint32_t bigoff = 0; bigoff < fs; bigoff += ssize) {
+    // Load the ROM in chunks to the scratch area. So that we can manage it.
     for (uint32_t offset = 0; offset < ssize && offset + bigoff < fs; offset += LOAD_BS) {
       uint32_t absoff = offset + bigoff;
-      if ((absoff & (128*1024-1)) == 0) {
-        if (progress)
-          progress((bigoff + offset / 4) >> 8, fs >> 8);
-
-        flash_erase_fsm_step(&erst);
-      }
+      if (progress && (absoff & (128*1024-1)) == 0)
+        progress((bigoff + offset / 4) >> 8, fs >> 8);
 
       unsigned toread = MIN(LOAD_BS, fs - absoff);
       UINT rdbytes;
@@ -423,6 +413,59 @@ unsigned flash_gba_nor(
       }
 
       dma_memcpy32(&scratch[offset], tmp, toread/4);
+
+      // Pre-erase flash sectors while reading data
+      // Check if previous erase completed, and start new ones
+      if (erase_pending && flash_operation_complete()) {
+        // Previous erase completed, finalize it
+        if (!flash_operation_wait()) {
+          f_close(&fd);
+          reset_superchis_normap();
+          return ERR_LOAD_BADROM;
+        }
+        erase_pending = false;
+      }
+
+      // Try to start erasing more sectors if no operation is pending
+      while (!erase_pending && erase_sector_offset < fs) {
+        uint32_t sector_addr = GBA_ROM_BASE + erase_sector_offset;
+        
+        // Check if this sector needs erasing
+        if (!flash_check_erased(sector_addr, flashinfo.blksize)) {
+          flash_erase_sector_start(sector_addr);
+          erase_pending = true;
+          erase_sector_offset += flashinfo.blksize;
+          break;  // Start one erase at a time
+        } else {
+          erase_sector_offset += flashinfo.blksize;
+        }
+      }
+    }
+
+    // After reading, continue erasing sectors until we cover the current chunk
+    uint32_t chunk_end = bigoff + ssize;
+    if (chunk_end > fs) chunk_end = fs;
+    
+    while (erase_sector_offset < chunk_end) {
+      // Wait for previous erase if needed
+      if (erase_pending) {
+        if (!flash_operation_wait()) {
+          f_close(&fd);
+          reset_superchis_normap();
+          return ERR_LOAD_BADROM;
+        }
+        erase_pending = false;
+      }
+
+      uint32_t sector_addr = GBA_ROM_BASE + erase_sector_offset;
+      
+      // Check if this sector needs erasing
+      if (!flash_check_erased(sector_addr, flashinfo.blksize)) {
+        flash_erase_sector_start(sector_addr);
+        erase_pending = true;
+      }
+      
+      erase_sector_offset += flashinfo.blksize;
     }
 
     // Patch ROM, don't need WAITCNT patches
@@ -435,22 +478,20 @@ unsigned flash_gba_nor(
     if (ingame_menu && igm_flashoffset)
       payload_apply_rom(scratch, ssize, bigoff, ingame_trampoline_payload, ingame_trampoline_payload_size, igm_flashoffset);
 
-    // Wait until erasing is complete (if it didn't complete in the meantime)
-    while (1) {
-      int r = flash_erase_fsm_step(&erst);
-      if (r > 0)
-        break;
-      if (r < 0) {
+    // Wait for the last erase to complete before programming
+    if (erase_pending) {
+      if (!flash_operation_wait()) {
         f_close(&fd);
         reset_superchis_normap();
-        return ERR_FLASH_OP;
+        return ERR_LOAD_BADROM;
       }
+      erase_pending = false;
     }
 
-    // Go ahead and erase the blocks, then program them.
+    // Program the blocks (all erasures are complete now)
     for (uint32_t offset = 0; offset < ssize && offset + bigoff < fs; offset += flashinfo.blksize) {
       uint32_t absoff = offset + bigoff;
-      uint32_t flashaddr = GBA_ROM_BASE_WS1 + absoff;
+      uint32_t flashaddr = GBA_ROM_BASE + absoff;
       if (progress && (absoff & (128*1024-1)) == 0)
         progress((bigoff + ssize / 4 + offset * 3/4) >> 8, fs >> 8);
 
@@ -472,17 +513,17 @@ unsigned launch_gba_nor(
   const char *romfn,
   const uint8_t *normap, unsigned blkcnts,
   const t_dirsave_info *dsinfo,
-  const t_rtc_info *rtcinfo,
+  const t_rtc_state *rtc_clock,
   bool ingame_menu,
   unsigned cheats
 ) {
 
-  bool use_rtc_patches = rtcinfo != NULL;
+  bool use_rtc_patches = rtc_clock != NULL;
 
   // Now the IGM: it sits along in the SDRAM (at 0x0 offset)
   uint32_t igm_addr = GBA_ROM_BASE;
   // IGM can use as much SDRAM as it needs, use 16MiB for now
-  uint32_t igm_space = 16*1024*1024;
+  uint32_t igm_space = 16*1024*102;
 
   // Install the menu before loading the ROM, otherwise we overwrite relevant assets.
   if (ingame_menu) {
@@ -503,8 +544,8 @@ unsigned launch_gba_nor(
   if (dsinfo)
     load_directsave_config(dsinfo);
 
-  if (rtcinfo)
-    load_rtcclock_data(rtcinfo);
+  if (rtc_clock)
+    load_rtcclock_data(rtc_clock);
 
   // Map the game NOR blocks. Unused blocks are zero mapped (to firmware)
   set_superchis_normap(normap);
