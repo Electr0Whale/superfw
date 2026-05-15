@@ -1,0 +1,41 @@
+name: Build SuperFW
+
+on:
+  push:
+    branches: [wqy10pt-font]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install devkitPro
+        uses: devkitpro/install-devkitpro-action@v1
+        with:
+          devkitARM: true
+
+      - name: Generate fonts
+        run: |
+          python3 res/fonts/bdf_to_pack.py \
+            --bdf wenquanyi_10pt.bdf \
+            --font-blocks ascii,latin,latin-a,latin-b,gen-punct,greek,cyrilic,shapes,cjk-sym,cjk-compat,hiragana,katakana,fullwidth,cjk-uni,hangul \
+            --output res/fonts.pack
+          python3 res/fonts/bdf_to_pack.py \
+            --bdf wenquanyi_10pt.bdf \
+            --font-blocks ascii,shapes \
+            --output /tmp/embed.pack
+          python3 res/fonts/pack_to_carray.py /tmp/embed.pack > src/fonts/font_embed.h
+          cp res/fonts.pack res/fonts-ext.pack
+
+      - name: Build Chis firmware
+        run: |
+          git submodule update --init apultra
+          make -j$(nproc) BOARD=chis BUNDLE_GBC_EMULATOR=0 BUNDLE_OTHER_EMULATORS=0
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: superfw-chis-wqy10pt
+          path: superfw.gba
