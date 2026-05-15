@@ -3,6 +3,9 @@ name: Build SuperFW
 on:
   push:
     branches: [wqy10pt-font]
+    paths-ignore:
+      - 'README.md'
+      - 'screenshots/**'
   workflow_dispatch:
 
 jobs:
