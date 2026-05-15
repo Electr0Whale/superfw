@@ -7,3 +7,5 @@
 *.gcno
 *.info
 *.i
+chismaker/
+original/

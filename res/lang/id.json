@@ -219,5 +219,6 @@
     "MSG_UIS_SPD2": "Biasa",
     "MSG_UIS_SPD3": "Cepat",
     "MSG_UIS_SPD4": "Amat cepat",
-    "MSG_STILLRTC": "Frozen"
+    "MSG_STILLRTC": "Frozen",
+    "MSG_FLASH_USAGE": "Penggunaan Flash"
 }

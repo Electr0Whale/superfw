@@ -1409,7 +1409,7 @@ void render_flashbrowser(volatile uint8_t *frame) {
 
   human_size(tmp1, sizeof(tmp1), smenu.fbrowser.usedblks * NOR_BLOCK_SIZE);
   human_size(tmp2, sizeof(tmp2), NOR_GAMEBLOCK_COUNT * NOR_BLOCK_SIZE);
-  npf_snprintf(tmp, sizeof(tmp), "Flash usage: %s/%s", tmp1, tmp2);
+  npf_snprintf(tmp, sizeof(tmp), "%s: %s/%s", msgs[lang_id][MSG_FLASH_USAGE], tmp1, tmp2);
   draw_text_ovf(tmp, frame, 8, 144, SCREEN_WIDTH - 16);
 
   for (unsigned i = 0; i < 240; i += 16)
