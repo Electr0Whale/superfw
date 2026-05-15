@@ -8,6 +8,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     container:
       image: devkitpro/devkitarm
     env:
@@ -37,22 +39,26 @@ jobs:
         run: |
           git submodule update --init apultra
           make -j$(nproc) BOARD=chis BUNDLE_GBC_EMULATOR=0 BUNDLE_OTHER_EMULATORS=0
-          cp superfw.gba superfw-chis.gba
+          mkdir -p out && cp superfw.gba out/superfw-chis.gba
 
       - name: Build Chis (emulator)
         run: |
-          rm -f *.gba *.elf *.payload *.map
+          rm -f superfw.gba *.elf *.payload *.map
           make -j$(nproc) BOARD=chis NO_SD_MODE=1 BUNDLE_GBC_EMULATOR=0 BUNDLE_OTHER_EMULATORS=0
-          mv superfw.gba superfw-emu.gba
+          cp superfw.gba out/superfw-emu.gba
 
-      - name: Upload Chis hardware
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: superfw-chis
-          path: superfw-chis.gba
+          path: out/
 
-      - name: Upload Chis emulator
-        uses: actions/upload-artifact@v4
+      - name: Create release
+        uses: softprops/action-gh-release@v2
         with:
-          name: superfw-chis-emu
-          path: superfw-emu.gba
+          name: CI Build ${{ github.sha }}
+          tag_name: ci-${{ github.run_number }}
+          files: out/*
+          prerelease: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
