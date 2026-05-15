@@ -12,6 +12,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Fix git ownership (Docker)
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
       - name: Generate fonts
         run: |
           python3 res/fonts/bdf_to_pack.py \
