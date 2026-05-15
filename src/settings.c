@@ -36,7 +36,7 @@ const t_combo_key hotkey_list[] = {
   {"L+R+A",         0x00FE},
   {"L+R+B",         0x00FD},
   {"L+R+◀+A",       0x00DE},
-  {"L+R+▶+B",       0x00ED},
+  {"L+R+⯈+B",       0x00ED},
   {"L+R+▲+A",       0x00BE},
   {"L+R+▼+A",       0x007E},
   {"A+B+Start",     0x03F4},
@@ -63,9 +63,8 @@ const uint8_t animspd_lut[] = {
 
 // Menu settings
 uint32_t menu_theme = 0;
-uint32_t lang_id = 1;  // zh (Chinese) as default (en=0, zh=1)
+uint32_t lang_id = 1;  // zh (Chinese) as default
 uint32_t recent_menu = 1;
-uint32_t hide_hidden = 0;
 uint32_t anim_speed = animspd_cnt / 2;
 
 // Default settings
@@ -88,8 +87,7 @@ uint32_t autosave_default = 1;
 uint32_t autosave_prefer_ds = 1;
 uint32_t ingamemenu_default = 1;
 uint32_t rtcpatch_default = 1;
-uint32_t rtcvalue_default = 45568800U;
-uint32_t rtcspeed_default = 3;
+t_rtc_state rtcvalue_default = { 20, 1, 26, 12, 0 };
 
 // Setting loading/saving routines
 bool save_ui_settings() {
@@ -107,12 +105,11 @@ bool save_ui_settings() {
   uint16_t lc = lang_getcode();
   char buf[512];
   npf_snprintf(buf, sizeof(buf),
-    "theme=%lu\n"
+    "menu_theme=%lu\n"
     "langcode=%c%c\n"
     "recent_menu=%lu\n"
-    "anim_speed=%lu\n"
-    "hide_hidden=%lu\n",
-    menu_theme, (lc & 0xFF), (lc >> 8), recent_menu, anim_speed, hide_hidden);
+    "anim_speed=%lu\n",
+    menu_theme, (lc & 0xFF), (lc >> 8), recent_menu, anim_speed);
 
   UINT wrbytes;
   FRESULT res = f_write(&fd, buf, strlen(buf), &wrbytes);
@@ -146,16 +143,16 @@ bool save_settings() {
     "default_patcher=%u\n"
     "default_igmenu=%lu\n"
     "default_rtcpatch=%lu\n"
-    "default_rtcts=%lu\n"
-    "default_rtctick=%lu\n"
+    "default_rtcval=%02u%02u%02u%02u%02u\n"
     "default_loadgame=%lu\n"
     "default_savegame=%lu\n"
     "prefer_directsave=%lu\n",
     hotkey_combo, boot_bios_splash, save_path_default, state_path_default,
     backup_sram_default, enable_cheats, use_slowld, use_fastew,
     (unsigned int)patcher_default, ingamemenu_default, rtcpatch_default,
-    rtcvalue_default, rtcspeed_default, autoload_default, autosave_default,
-    autosave_prefer_ds);
+    rtcvalue_default.hour, rtcvalue_default.mins,
+    rtcvalue_default.day + 1, rtcvalue_default.month + 1, rtcvalue_default.year,
+    autoload_default, autosave_default, autosave_prefer_ds);
 
   UINT wrbytes;
   FRESULT res = f_write(&fd, buf, strlen(buf), &wrbytes);
@@ -176,11 +173,13 @@ static void parse_settings(void *usr, const char *var, const char *value) {
     backup_sram_default = valu;
   else if (!strcmp(var, "default_patcher"))
     patcher_default = valu % PatchTotalCNT;
-  else if (!strcmp(var, "default_rtcts"))
-    rtcvalue_default = valu;
-  else if (!strcmp(var, "default_rtctick"))
-    rtcspeed_default = valu;
-  else {
+  else if (!strcmp(var, "default_rtcval")) {
+    rtcvalue_default.year = valu % 100U; valu /= 100U;
+    rtcvalue_default.month = (((valu - 1) % 100U) % 12U); valu /= 100U;
+    rtcvalue_default.day = (((valu - 1) % 100U) % 31U); valu /= 100U;
+    rtcvalue_default.mins = ((valu % 100U) % 60U); valu /= 100U;
+    rtcvalue_default.hour = valu % 24U;
+  } else {
     const struct {
       const char *s;
       uint32_t *var;
@@ -205,12 +204,10 @@ static void parse_settings(void *usr, const char *var, const char *value) {
 
 static void parse_ui_settings(void *usr, const char *var, const char *value) {
   unsigned valu = parseuint(value);
-  if (!strcmp(var, "theme"))
+  if (!strcmp(var, "menu_theme"))
     menu_theme = valu;
   else if (!strcmp(var, "recent_menu"))
     recent_menu = valu;
-  else if (!strcmp(var, "hide_hidden"))
-    hide_hidden = valu;
   else if (!strcmp(var, "anim_speed"))
     anim_speed = valu;
   else if (!strcmp(var, "langcode")) {
@@ -289,29 +286,29 @@ void sram_filename_calc(const char *rom, char *savefn) {
   sram_template_filename_calc(rom, ".sav", savefn);
 }
 
-static void parse_rom_load_settings(void *usr, const char *var, const char *value) {
-  t_rom_load_settings *rs = (t_rom_load_settings*)usr;
+static void parse_rom_settings(void *usr, const char *var, const char *value) {
+  t_rom_settings *rs = (t_rom_settings*)usr;
   unsigned valu = parseuint(value);
   if (!strcmp(var, "rtc"))
     rs->use_rtc = valu & 1;
+  else if (!strcmp(var, "cheats"))
+    rs->use_cheats = valu & 1;
   else if (!strcmp(var, "igm"))
     rs->use_igm = valu & 1;
   else if (!strcmp(var, "directsaving"))
     rs->use_dsaving = valu & 1;
   else if (!strcmp(var, "patchmode"))
-    rs->patch_policy = valu % PatchOptCNT;
+    rs->patch_policy = valu % 3;
+  else if (!strcmp(var, "rtcval")) {
+    rs->rtcval.year = valu % 100U; valu /= 100U;
+    rs->rtcval.month = (((valu - 1) % 100U) % 12U); valu /= 100U;
+    rs->rtcval.day = (((valu - 1) % 100U) % 31U); valu /= 100U;
+    rs->rtcval.mins = ((valu % 100U) % 60U); valu /= 100U;
+    rs->rtcval.hour = valu % 24U;
+  }
 }
 
-static void parse_rom_launch_settings(void *usr, const char *var, const char *value) {
-  t_rom_launch_settings *rs = (t_rom_launch_settings*)usr;
-  unsigned valu = parseuint(value);
-  if (!strcmp(var, "cheats"))
-    rs->use_cheats = valu & 1;
-  else if (!strcmp(var, "rtcts"))
-    rs->rtcts = valu;
-}
-
-bool load_rom_settings(const char *fn, t_rom_load_settings *rld, t_rom_launch_settings *rlh) {
+bool load_rom_settings(const char *fn, t_rom_settings *rs) {
   char buf[512];
   strcpy(buf, ROMCONFIG_PATH);
   strcat(buf, file_basename(fn));
@@ -325,17 +322,14 @@ bool load_rom_settings(const char *fn, t_rom_load_settings *rld, t_rom_launch_se
   UINT rdbytes;
   if (FR_OK == f_read(&fd, buf, sizeof(buf) - 1, &rdbytes)) {
     buf[rdbytes] = 0;
-    if (rld)
-      parse_file(buf, parse_rom_load_settings, rld);
-    if (rlh)
-      parse_file(buf, parse_rom_launch_settings, rlh);
+    parse_file(buf, parse_rom_settings, rs);
   }
   f_close(&fd);
 
   return true;
 }
 
-bool save_rom_settings(const char *fn, const t_rom_load_settings *rld, const t_rom_launch_settings *rlh) {
+bool save_rom_settings(const char *fn, const t_rom_settings *rs) {
   // Create the directory (just in case it doesn't exist
   f_mkdir(SUPERFW_DIR);
   f_mkdir(ROMCONFIG_PATH);
@@ -355,17 +349,18 @@ bool save_rom_settings(const char *fn, const t_rom_load_settings *rld, const t_r
   // Serialize the ROM settings
   npf_snprintf(buf, sizeof(buf),
     "patchmode=%u\n"
-    "igm=%u\n"
     "rtc=%u\n"
+    "igm=%u\n"
     "directsaving=%u\n"
     "cheats=%u\n"
-    "rtcts=%u\n",
-    rld->patch_policy,
-    rld->use_igm ? 1 : 0,
-    rld->use_rtc ? 1 : 0,
-    rld->use_dsaving ? 1 : 0,
-    rlh->use_cheats ? 1 : 0,
-    (unsigned int)rlh->rtcts);
+    "rtcval=%02u%02u%02u%02u%02u\n",
+    rs->patch_policy,
+    rs->use_rtc ? 1 : 0,
+    rs->use_igm ? 1 : 0,
+    rs->use_dsaving ? 1 : 0,
+    rs->use_cheats ? 1 : 0,
+    rs->rtcval.hour, rs->rtcval.mins,
+    rs->rtcval.day + 1, rs->rtcval.month + 1, rs->rtcval.year);
 
   UINT wrbytes;
   FRESULT res = f_write(&fd, buf, strlen(buf), &wrbytes);
