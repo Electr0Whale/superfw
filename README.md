@@ -17,6 +17,9 @@
 基于 upstream v0.20 (251752e5)，替换为文泉驿 10pt 点阵宋体。
 Based on upstream v0.20 (251752e5), font replaced with WenQuanYi 10pt bitmap Song.
 
+> **下载 / Download**: 最新编译版本在 [CI Pre-release](https://github.com/Electr0Whale/superfw/releases) 中自动发布（含 Chis 实机版 + 模拟器版）。
+> The latest build is auto-published as a [CI Pre-release](https://github.com/Electr0Whale/superfw/releases) (includes Chis hardware + emulator versions).
+
 ## 改动 / Changes
 
 - **主字体 / Primary font**: 文泉驿 Bitmap Song 10pt (CJK 12px, Latin variable)
