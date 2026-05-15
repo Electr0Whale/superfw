@@ -8,7 +8,12 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    container: devkitpro/devkitarm
+    container:
+      image: devkitpro/devkitarm
+    env:
+      DEVKITPRO: /opt/devkitpro
+      DEVKITARM: /opt/devkitpro/devkitARM
+      PATH: /opt/devkitpro/devkitARM/bin:/opt/devkitpro/tools/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     steps:
       - uses: actions/checkout@v4
 
