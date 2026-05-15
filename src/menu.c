@@ -200,11 +200,11 @@ const struct {
   uint16_t hi_blend;     // Menu highlight color (browser)
   uint16_t sh_color;     // Menu shadow/disabled color
 } themes[] = {
+  { RGB2GBA(0xe0e0e0), RGB2GBA(0xffffff), RGB2GBA(0x000000), RGB2GBA(0xc0c0c0), RGB2GBA(0xd0d0d0), RGB2GBA(0x808080) },
   { RGB2GBA(0xeca551), RGB2GBA(0xe7c092), RGB2GBA(0x000000), RGB2GBA(0xbda27b), RGB2GBA(0x90816e), RGB2GBA(0x615d58) },
   { RGB2GBA(0x26879c), RGB2GBA(0x8fb1b8), RGB2GBA(0x000000), RGB2GBA(0x5296a5), RGB2GBA(0x1d7f95), RGB2GBA(0x6f8185) },
   { RGB2GBA(0xad11c8), RGB2GBA(0xe47af6), RGB2GBA(0x000000), RGB2GBA(0xad5dc6), RGB2GBA(0x724095), RGB2GBA(0x72667a) },
   { RGB2GBA(0x222222), RGB2GBA(0x444444), RGB2GBA(0xeeeeee), RGB2GBA(0x737573), RGB2GBA(0xaaaaaa), RGB2GBA(0x606060) },
-  { RGB2GBA(0xe0e0e0), RGB2GBA(0xffffff), RGB2GBA(0x000000), RGB2GBA(0xc0c0c0), RGB2GBA(0xd0d0d0), RGB2GBA(0x808080) },
 };
 #define THEME_COUNT (sizeof(themes) / sizeof(themes[0]))
 
