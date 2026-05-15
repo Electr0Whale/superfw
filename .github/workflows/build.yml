@@ -8,13 +8,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    container: devkitpro/devkitarm
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install devkitPro
-        uses: devkitpro/install-devkitpro-action@v1
-        with:
-          devkitARM: true
 
       - name: Generate fonts
         run: |
