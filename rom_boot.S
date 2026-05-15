@@ -52,7 +52,7 @@
 #define WRAM_BOOTM_ADDR  0x03800000     /* WRAM were boot code is copied */
 #define GAMEPAK_BASEADDR 0x08000000
 
-#define FONT_BASE_ADDR   0x08E80000     @ Unpacked font glyph database (1.5MiB)
+#define FONT_BASE_ADDR   0x08F00000     @ Unpacked font glyph database
 #define HISCRATCH_ADDR   0x09000000     @ Place here any temporary data
 #define PATCH_DB_ADDR    0x09D00000     @ Where patch db lives
 #define ASSETS_ADDR      0x09E00000     @ Where assets (emu/menu) live

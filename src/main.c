@@ -144,7 +144,7 @@ static int main_gba() {
   // the real pack has dsize > 500KB, so use a high threshold to
   // skip any false positives inside the firmware binary.
   {
-    const uint8_t *scan = (const uint8_t*)0x08040000;
+    const uint8_t *scan = (const uint8_t*)0x08010000;
     const uint8_t *end  = (const uint8_t*)0x08400000;
     for (; scan < end; scan += 4) {
       if (scan[0] == 'F' && scan[1] == 'O' && scan[2] == 1) {
