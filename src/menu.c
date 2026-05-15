@@ -1450,7 +1450,7 @@ void render_flashbrowser(volatile uint8_t *frame) {
 
   human_size(tmp1, sizeof(tmp1), smenu.fbrowser.usedblks * NOR_BLOCK_SIZE);
   human_size(tmp2, sizeof(tmp2), NOR_GAMEBLOCK_COUNT * NOR_BLOCK_SIZE);
-  npf_snprintf(tmp, sizeof(tmp), "Flash usage: %s/%s", tmp1, tmp2);
+  npf_snprintf(tmp, sizeof(tmp), msgs[lang_id][MSG_FLASH_USAGE], tmp1, tmp2);
   draw_text_ovf(tmp, frame, 8, 144, SCREEN_WIDTH - 16);
 }
 #endif
@@ -1932,7 +1932,7 @@ void render_settings(volatile uint8_t *frame) {
 
   if (msk & 0x40000) {
     draw_button_box(frame, 20, 220, 112, 132, smenu.set.selector == SettSave);
-    draw_central_text(msgs[lang_id][MSG_UIS_SAVE], frame, 132, 114);
+    draw_central_text(msgs[lang_id][MSG_UIS_SAVE], frame, 120, 114);
   }
 
   // Render bar below for help messge

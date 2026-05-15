@@ -222,6 +222,7 @@ en_strings = [
   "MSG_DBPINFO":   "Patch database version info",
   }),
   ("SUPPORT_NORGAMES", {
+  "MSG_FLASH_USAGE": "Flash usage: %s/%s",
   "MSG_NOR_EMPTY":  "Flash is empty",
   "MSG_Q5_DELNORG": "Delete this game from flash memory?",
   "MSG_Q6_CLRNOR":  "Do you want to format the internal flash memory?",

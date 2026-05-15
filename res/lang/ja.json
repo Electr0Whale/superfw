@@ -203,6 +203,7 @@
     "MSG_FMGR_UNHIDE": "Un-Hide file/directory",
     "MSG_REMEMB_CFG_OK": "Config saved!",
     "MSG_FWUP_BADFL": "Bad FW variant!",
+    "MSG_FLASH_USAGE": "Flash 使用量: %s/%s",
     "MSG_NOR_EMPTY": "Flash is empty",
     "MSG_Q5_DELNORG": "Delete this game from flash memory?",
     "MSG_Q6_CLRNOR": "Do you want to format the internal flash memory?",
