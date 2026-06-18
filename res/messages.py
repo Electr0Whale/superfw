@@ -3,6 +3,17 @@
 
 import os, sys, json
 
+
+def _force_utf8_stdout():
+  # On Windows, redirected stdout may default to a legacy code page and corrupt
+  # generated headers. Force UTF-8 so checked-in assets and build outputs stay
+  # deterministic across shells.
+  if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="strict")
+
+
+_force_utf8_stdout()
+
 # Main menu/firmware string database.
 
 OTHER_LANGS = [
@@ -222,7 +233,6 @@ en_strings = [
   "MSG_DBPINFO":   "Patch database version info",
   }),
   ("SUPPORT_NORGAMES", {
-  "MSG_FLASH_USAGE": "Flash usage: %s/%s",
   "MSG_NOR_EMPTY":  "Flash is empty",
   "MSG_Q5_DELNORG": "Delete this game from flash memory?",
   "MSG_Q6_CLRNOR":  "Do you want to format the internal flash memory?",
@@ -379,5 +389,4 @@ elif len(sys.argv) > 1 and sys.argv[1] == "h":
       c = ord(l[0]) | (ord(l[1]) << 8)
       print("  0x%04x,     // %s" % (c, l))
     print("};")
-
 

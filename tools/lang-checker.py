@@ -8,6 +8,9 @@
 
 import json, struct, os, sys
 
+if hasattr(sys.stdout, "reconfigure"):
+  sys.stdout.reconfigure(encoding="utf-8")
+
 # Load font from pack directly, and parse it to generate a char-width table
 charw = {}
 
@@ -41,13 +44,13 @@ for i in range(bk):
 
 
 # Attempts to do some sanity checking with translations
-alerts = list(eval("{" + "\n".join([x for x in open("res/messages.py").read().split("\n") if "# alertmsg" in x]) + "\n}").keys())
-igmalerts = list(eval("{" + "\n".join([x for x in open("res/messages.py").read().split("\n") if "# igm-alertmsg" in x]) + "\n}").keys())
+alerts = list(eval("{" + "\n".join([x for x in open("res/messages.py", encoding="utf-8").read().split("\n") if "# alertmsg" in x]) + "\n}").keys())
+igmalerts = list(eval("{" + "\n".join([x for x in open("res/messages.py", encoding="utf-8").read().split("\n") if "# igm-alertmsg" in x]) + "\n}").keys())
 
 # Check that all unicode chars are in the font file!
 print("------- FONT FILE CHECK -------")
 for f in os.listdir("res/lang/"):
-  data = json.load(open("res/lang/" + f))
+  data = json.load(open("res/lang/" + f, encoding="utf-8"))
   for k in data:
     if not data[k]: continue
     for x in data[k]:
@@ -59,7 +62,7 @@ POPUP_WIDTH = 206      # In pixels
 
 print("------- POP UP STRING CHECK -------")
 for f in os.listdir("res/lang/"):
-  data = json.load(open("res/lang/" + f))
+  data = json.load(open("res/lang/" + f, encoding="utf-8"))
   for k in alerts:
     if k in data:
       sentlen = sum(charw[ord(x)] for x in data[k])
@@ -70,10 +73,12 @@ POPUP_WIDTH = 234      # In pixels
 
 print("------- IGM POP UP STRING CHECK -------")
 for f in os.listdir("res/lang/"):
-  data = json.load(open("res/lang/" + f))
+  data = json.load(open("res/lang/" + f, encoding="utf-8"))
   for k in igmalerts:
     if k in data:
       sentlen = sum(charw[ord(x)] for x in data[k])
       if sentlen > POPUP_WIDTH:
         print(k, f, data[k], sentlen)
+
+
 

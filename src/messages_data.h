@@ -45,9 +45,6 @@ enum TranslationID {
   MSG_FASTEW_I,
   MSG_FASTSD_I,
   MSG_FLASH_READOK,
-#ifdef SUPPORT_NORGAMES
-  MSG_FLASH_USAGE,
-#endif
   MSG_FMGR_DEL,
   MSG_FMGR_HIDE,
   MSG_FMGR_UNHIDE,
@@ -250,9 +247,6 @@ const char * const msg_en[] = {
   /* MSG_FASTEW_I         */ "Overclock EWRAM for some extra performance. Not available on NDS or GBA Micro",
   /* MSG_FASTSD_I         */ "Use a fast ROM loading mechanism. Can result in crashes or incorrect reads in some devices",
   /* MSG_FLASH_READOK     */ "Flash dump successful!",
-#ifdef SUPPORT_NORGAMES
-  /* MSG_FLASH_USAGE      */ "Flash usage: %s/%s",
-#endif
   /* MSG_FMGR_DEL         */ "Delete file/directory",
   /* MSG_FMGR_HIDE        */ "Hide file/directory",
   /* MSG_FMGR_UNHIDE      */ "Un-Hide file/directory",
@@ -455,9 +449,6 @@ const char * const msg_zh[] = {
   /* MSG_FASTEW_I         */ "对EWRAM超频, 略微提升性能. 不支持NDS及GBM.",
   /* MSG_FASTSD_I         */ "启用快速的ROM读取机制, 在部分设备上可能引发问题",
   /* MSG_FLASH_READOK     */ "Flash备份成功!",
-#ifdef SUPPORT_NORGAMES
-  /* MSG_FLASH_USAGE      */ "Flash 用量: %s/%s",
-#endif
   /* MSG_FMGR_DEL         */ "删除文件或目录",
   /* MSG_FMGR_HIDE        */ "隐藏文件或目录",
   /* MSG_FMGR_UNHIDE      */ "取消隐藏文件或目录",
@@ -660,9 +651,6 @@ const char * const msg_ja[] = {
   /* MSG_FASTEW_I         */ "Overclock EWRAM for some extra performance. Not available on NDS or GBA Micro",
   /* MSG_FASTSD_I         */ "Use a fast ROM loading mechanism. Can result in crashes or incorrect reads in some devices",
   /* MSG_FLASH_READOK     */ "Flash dump successful!",
-#ifdef SUPPORT_NORGAMES
-  /* MSG_FLASH_USAGE      */ "Flash 使用量: %s/%s",
-#endif
   /* MSG_FMGR_DEL         */ "Delete file/directory",
   /* MSG_FMGR_HIDE        */ "Hide file/directory",
   /* MSG_FMGR_UNHIDE      */ "Un-Hide file/directory",
@@ -865,9 +853,6 @@ const char * const msg_ru[] = {
   /* MSG_FASTEW_I         */ "Разгон EWRAM для увеличения производительности. Не доступно для NDS и GB Micro",
   /* MSG_FASTSD_I         */ "Используется механизм быстрой загрузки, может привести к ошибкам или некорректному чтению",
   /* MSG_FLASH_READOK     */ "Дамп прошивки сохранен!",
-#ifdef SUPPORT_NORGAMES
-  /* MSG_FLASH_USAGE      */ "Flash занято: %s/%s",
-#endif
   /* MSG_FMGR_DEL         */ "Удалить файл/папку",
   /* MSG_FMGR_HIDE        */ "Скрыть файл/папку",
   /* MSG_FMGR_UNHIDE      */ "Показать файл/папку",
@@ -1070,9 +1055,6 @@ const char * const msg_id[] = {
   /* MSG_FASTEW_I         */ "Meng-overclock EWRAM untuk kinerja lebih. Tidak bisa di NDS atau GBA Micro",
   /* MSG_FASTSD_I         */ "Memuat ROM dengan cara cepat. Bisa mogok atau gagal baca di beberapa konsol",
   /* MSG_FLASH_READOK     */ "Men-dump flash berhasil!",
-#ifdef SUPPORT_NORGAMES
-  /* MSG_FLASH_USAGE      */ "Flash terpakai: %s/%s",
-#endif
   /* MSG_FMGR_DEL         */ "Delete file/directory",
   /* MSG_FMGR_HIDE        */ "Hide file/directory",
   /* MSG_FMGR_UNHIDE      */ "Un-Hide file/directory",
@@ -1275,9 +1257,6 @@ const char * const msg_ms[] = {
   /* MSG_FASTEW_I         */ "Overclocking EWRAM untuk kuasa lebih. Tidak boleh pada NDS atau GBA Micro",
   /* MSG_FASTSD_I         */ "Memuatkan ROM secara laju. Dapat ranap atau gagal baca pada beberapa konsol",
   /* MSG_FLASH_READOK     */ "Dumping flash berjaya!",
-#ifdef SUPPORT_NORGAMES
-  /* MSG_FLASH_USAGE      */ "Flash terpakai: %s/%s",
-#endif
   /* MSG_FMGR_DEL         */ "Delete file/directory",
   /* MSG_FMGR_HIDE        */ "Hide file/directory",
   /* MSG_FMGR_UNHIDE      */ "Un-Hide file/directory",

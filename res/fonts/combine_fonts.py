@@ -107,7 +107,7 @@ def build_var_block(primary_g, secondary_g, start_cp, end_cp):
         if colsw > 12:
             cols = cols[:12]
             colsw = 12
-        data = b''.join(struct.pack('<H', x) for x in cols)
+        data = b''.join(struct.pack('<H', x & 0xFFFF) for x in cols)
         if data in seen:
             index.append((colsw, seen[data]))
         else:
@@ -149,7 +149,7 @@ def build_fixed_block(primary_g, secondary_g, start_cp, end_cp, col_count):
             elif len(cs) < col_count:
                 cs = cs + [0x0000] * (col_count - len(cs))
             cols = cs
-        data += b''.join(struct.pack('<H', x) for x in cols)
+        data += b''.join(struct.pack('<H', x & 0xFFFF) for x in cols)
 
     flags = 0x00000002 if col_count == 12 else 0x00000001
     return (flags, data)
@@ -168,9 +168,13 @@ def build_merged_block(primary_g, secondary_g, start_cp, end_cp, cat):
     if max_w == 0:
         return None  # skip empty block
 
-    if max_w <= 8:
+    # Keep Latin-ish blocks variable-width, matching the upstream pack
+    # semantics and the standalone BDF generator used elsewhere in the tree.
+    # The fork-specific 12px fixed-width path is reserved for genuinely fixed
+    # CJK-style glyph blocks.
+    if cat == "latin" and max_w <= 12:
         return build_var_block(primary_g, secondary_g, start_cp, end_cp)
-    elif max_w <= 12:
+    if max_w <= 12:
         return build_fixed_block(primary_g, secondary_g, start_cp, end_cp, 12)
     else:
         return build_fixed_block(primary_g, secondary_g, start_cp, end_cp, 16)

@@ -15,12 +15,9 @@ GLOBAL_DEFINES = -D__GBA__
 # Ensure Python outputs UTF-8 (needed on Windows CJK locales)
 export PYTHONIOENCODING = utf-8
 
-# Font source: "bdf" (Fusion Pixel) or "pcf" (WenQuanYi)
-FONT_SOURCE ?= bdf
-FONT_INPUT ?= fusion-pixel-12px-monospaced-zh_hans.bdf
-ifeq ($(FONT_SOURCE),pcf)
-  FONT_INPUT = wenquanyi_9pt.pcf
-endif
+FONT_PACK = res/fonts.pack
+FONT_EXT_PACK = res/fonts-ext.pack
+FONT_EMBED = src/fonts/font_embed.h
 
 # BOARD can be "sd", "lite", "chis"
 BOARD ?= sd
@@ -185,7 +182,7 @@ all:	$(FWBINFILES) $(BIEMUFILES) directsave.payload ingame_trampoline.payload
 	# Fix the header/checksum.
 	./tools/fw-fixer.py superfw.gba
 
-firmware.ewram.gba: $(INFILES) ingamemenu.payload superfw.dldi.payload directsave.payload ingame_trampoline.payload src/messages_data.h ldscripts/gba_ewram.ld.i
+firmware.ewram.gba: $(INFILES) ingamemenu.payload superfw.dldi.payload directsave.payload ingame_trampoline.payload src/messages_data.h ldscripts/gba_ewram.ld.i $(FONT_PACK) $(FONT_EXT_PACK) $(FONT_EMBED)
 	# Build the actual firmware image
 	$(CC) $(CFLAGS) -o firmware.ewram.elf $(INFILES) -T ldscripts/gba_ewram.ld.i -nostartfiles -Wl,-Map=firmware.ewram.map -Wl,--print-memory-usage -fno-builtin
 	$(OBJCOPY) --output-target=binary firmware.ewram.elf firmware.ewram.gba
@@ -216,6 +213,11 @@ src/messages_data.h:	res/messages.py
 
 src/menu_messages.h:	res/messages.py
 	./res/messages.py h menu > src/menu_messages.h
+
+$(FONT_PACK) $(FONT_EXT_PACK) $(FONT_EMBED): res/fonts/build.py \
+		wenquanyi_10pt.bdf fusion-pixel-12px-monospaced-zh_hans.bdf \
+		res/fonts/bdf_to_pack.py res/fonts/combine_fonts.py res/fonts/pack_to_carray.py
+	./res/fonts/build.py
 
 %.gba.comp:	%.gba.bin apultra/apultra
 	./apultra/apultra $< $@

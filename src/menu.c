@@ -487,8 +487,6 @@ static bool loadrom_progress_abort(unsigned done, unsigned total) {
   // Capture A/B buttons to abort the progress
   return ((~REG_KEYINPUT) & KEY_BUTTSTA);
 }
-
-
 bool generate_patches_progress(const char *fn, unsigned fs) {
   // Open ROM and load it in the SDRAM. We load it in 4MB chunks. Not ideal but
   // we want to preserve the data loaded in the SDRAM (ie. fonts).
@@ -594,8 +592,6 @@ void sram_battery_test_callback(bool confirm) {
     spop.alert_msg = msgs[lang_id][MSG_SRAMTST_RDY];
   }
 }
-
-
 static const t_patch * get_game_patch(const t_load_gba_info *info) {
   return info->patch_type == PatchDatabase && info->patches_datab_found ? &info->patches_datab :
          info->patch_type == PatchEngine   && info->patches_cache_found ? &info->patches_cache : NULL;
@@ -1356,6 +1352,38 @@ static void draw_central_text(const char *t, volatile uint8_t *frame, unsigned x
   draw_text_idx8_bus16(t, basept, SCREEN_WIDTH, FT_COLOR);
 }
 
+static void draw_central_text_nudge_up(const char *t, volatile uint8_t *frame, unsigned x, unsigned y) {
+  draw_central_text(t, frame, x, y - 1);
+}
+
+static void draw_central_option_text(const char *t, volatile uint8_t *frame, unsigned x, unsigned y) {
+  unsigned tlen = strlen(t);
+  if (tlen < 2 || t[0] != '<' || t[tlen - 1] != '>') {
+    draw_central_text(t, frame, x, y);
+    return;
+  }
+
+  char inner[80];
+  if (tlen - 2 >= sizeof(inner)) {
+    draw_central_text(t, frame, x, y);
+    return;
+  }
+
+  memcpy(inner, &t[1], tlen - 2);
+  inner[tlen - 2] = 0;
+
+  unsigned lw = font_width("<");
+  unsigned iw = font_width(inner);
+  unsigned rw = font_width(">");
+  unsigned tw = lw + iw + rw;
+
+  unsigned left = x >= tw / 2 ? x - tw / 2 : 0;
+  uint8_t *basept = (uint8_t*)&frame[y * SCREEN_WIDTH + left];
+  draw_text_idx8_bus16("<", basept - SCREEN_WIDTH, SCREEN_WIDTH, FT_COLOR);
+  draw_text_idx8_bus16(inner, basept + lw, SCREEN_WIDTH, FT_COLOR);
+  draw_text_idx8_bus16(">", basept + lw + iw - SCREEN_WIDTH, SCREEN_WIDTH, FT_COLOR);
+}
+
 static void draw_central_text_ovf(const char *t, volatile uint8_t *frame, unsigned x, unsigned y, unsigned maxw) {
   unsigned twidth = font_width(t);
   if (twidth <= maxw) {
@@ -1450,7 +1478,7 @@ void render_flashbrowser(volatile uint8_t *frame) {
 
   human_size(tmp1, sizeof(tmp1), smenu.fbrowser.usedblks * NOR_BLOCK_SIZE);
   human_size(tmp2, sizeof(tmp2), NOR_GAMEBLOCK_COUNT * NOR_BLOCK_SIZE);
-  npf_snprintf(tmp, sizeof(tmp), msgs[lang_id][MSG_FLASH_USAGE], tmp1, tmp2);
+  npf_snprintf(tmp, sizeof(tmp), "Flash usage: %s/%s", tmp1, tmp2);
   draw_text_ovf(tmp, frame, 8, 144, SCREEN_WIDTH - 16);
 }
 #endif
@@ -1803,8 +1831,8 @@ void render_rtcpop(volatile uint8_t *frame) {
   const uint8_t cox[] = {
     60, 94, 120, 154, 180
   };
-  draw_central_text("▲", frame, cox[spop.rtcpop.selector], 54);
-  draw_central_text("▼", frame, cox[spop.rtcpop.selector], 84);
+  draw_central_text("▴", frame, cox[spop.rtcpop.selector], 54);
+  draw_central_text("▾", frame, cox[spop.rtcpop.selector], 84);
 }
 
 void render_settings(volatile uint8_t *frame) {
@@ -1814,9 +1842,9 @@ void render_settings(volatile uint8_t *frame) {
                      smenu.set.selector - 2;
 
   if (smenu.set.selector > 2)
-    draw_central_text("▲", frame, 120, 15);
+    draw_central_text("▴", frame, 120, 15);
   if (smenu.set.selector < SettSave - 2)
-    draw_central_text("▼", frame, 120, 125);
+    draw_central_text("▾", frame, 120, 125);
 
   unsigned msk = 0x1F << baseopt;
   unsigned optcnt = 0;
@@ -1830,54 +1858,54 @@ void render_settings(volatile uint8_t *frame) {
   if (msk & 0x00002) {
     npf_snprintf(tmp, sizeof(tmp), "< %s >", hotkey_list[hotkey_combo].cname);
     draw_text_ovf(msgs[lang_id][MSG_SETT_HOTK], frame, 8, offy + rowh*optcnt, 224);
-    draw_central_text(tmp, frame, colx, offy + rowh*optcnt++);
+    draw_central_option_text(tmp, frame, colx, offy + rowh*optcnt++);
   }
 
   if (msk & 0x00004) {
     draw_text_ovf(msgs[lang_id][MSG_SETT_BOOT], frame, 8, offy + rowh*optcnt, 224);
-    draw_central_text(msgs[lang_id][MSG_BOOT_TYPE0 + boot_bios_splash], frame, colx, offy + rowh*optcnt++);
+    draw_central_option_text(msgs[lang_id][MSG_BOOT_TYPE0 + boot_bios_splash], frame, colx, offy + rowh*optcnt++);
   }
 
   if (msk & 0x00008) {
     draw_text_ovf(msgs[lang_id][MSG_SETT_FASTSD], frame, 8, offy + rowh*optcnt, 224);
-    draw_central_text(msgs[lang_id][use_slowld ? MSG_KNOB_DISABLED : MSG_KNOB_ENABLED], frame, colx, offy + rowh*optcnt++);
+    draw_central_option_text(msgs[lang_id][use_slowld ? MSG_KNOB_DISABLED : MSG_KNOB_ENABLED], frame, colx, offy + rowh*optcnt++);
   }
 
   if (msk & 0x00010) {
     draw_text_ovf(msgs[lang_id][MSG_SETT_FASTEW], frame, 8, offy + rowh*optcnt, 224);
-    draw_central_text(msgs[lang_id][use_fastew ? MSG_KNOB_ENABLED : MSG_KNOB_DISABLED], frame, colx, offy + rowh*optcnt++);
+    draw_central_option_text(msgs[lang_id][use_fastew ? MSG_KNOB_ENABLED : MSG_KNOB_DISABLED], frame, colx, offy + rowh*optcnt++);
   }
 
   if (msk & 0x00020) {
     draw_text_ovf(msgs[lang_id][MSG_SETT_SAVET], frame, 8, offy + rowh*optcnt, 224);
 
     if (save_path_default == SaveRomName)
-      draw_central_text(msgs[lang_id][MSG_NEXTTO_ROM], frame, colx, offy + rowh*optcnt++);
+      draw_central_option_text(msgs[lang_id][MSG_NEXTTO_ROM], frame, colx, offy + rowh*optcnt++);
     else {
       npf_snprintf(tmp, sizeof(tmp), "< %s >", save_paths[save_path_default]);
-      draw_central_text(tmp, frame, colx, offy + rowh*optcnt++);
+      draw_central_option_text(tmp, frame, colx, offy + rowh*optcnt++);
     }
   }
 
   if (msk & 0x00040) {
     npf_snprintf(tmp, sizeof(tmp), "< %lu >", backup_sram_default);
     draw_text_ovf(msgs[lang_id][MSG_SETT_SAVEBK], frame, 8, offy + rowh*optcnt, 224);
-    draw_central_text(tmp, frame, colx, offy + rowh*optcnt++ );
+    draw_central_option_text(tmp, frame, colx, offy + rowh*optcnt++ );
   }
 
   if (msk & 0x00080) {
     draw_text_ovf(msgs[lang_id][MSG_SETT_STATET], frame, 8, offy + rowh*optcnt, 224);
     if (state_path_default == StateRomName)
-      draw_central_text(msgs[lang_id][MSG_NEXTTO_ROM], frame, colx, offy + rowh*optcnt++);
+      draw_central_option_text(msgs[lang_id][MSG_NEXTTO_ROM], frame, colx, offy + rowh*optcnt++);
     else {
       npf_snprintf(tmp, sizeof(tmp), "< %s >", savestates_paths[state_path_default]);
-      draw_central_text(tmp, frame, colx, offy + rowh*optcnt++);
+      draw_central_option_text(tmp, frame, colx, offy + rowh*optcnt++);
     }
   }
 
   if (msk & 0x00100) {
     draw_text_ovf(msgs[lang_id][MSG_SETT_CHTEN], frame, 8, offy + rowh*optcnt, 224);
-    draw_central_text(msgs[lang_id][enable_cheats ? MSG_KNOB_ENABLED : MSG_KNOB_DISABLED], frame, colx, offy + rowh*optcnt++);
+    draw_central_option_text(msgs[lang_id][enable_cheats ? MSG_KNOB_ENABLED : MSG_KNOB_DISABLED], frame, colx, offy + rowh*optcnt++);
   }
 
   if (msk & 0x00200)
@@ -1885,17 +1913,17 @@ void render_settings(volatile uint8_t *frame) {
 
   if (msk & 0x00400) {
     draw_text_ovf(msgs[lang_id][MSG_DEFS_PATCH], frame, 8, offy + rowh*optcnt, 224);
-    draw_central_text(msgs[lang_id][MSG_PATCH_TYPE0 + patcher_default], frame, colx, offy + rowh*optcnt++);
+    draw_central_option_text(msgs[lang_id][MSG_PATCH_TYPE0 + patcher_default], frame, colx, offy + rowh*optcnt++);
   }
 
   if (msk & 0x00800) {
     draw_text_ovf(msgs[lang_id][MSG_LOADER_MENU], frame, 8, offy + rowh*optcnt, 224);
-    draw_central_text(msgs[lang_id][MSG_KNOB_DISABLED + ingamemenu_default], frame, colx, offy + rowh*optcnt++);
+    draw_central_option_text(msgs[lang_id][MSG_KNOB_DISABLED + ingamemenu_default], frame, colx, offy + rowh*optcnt++);
   }
 
   if (msk & 0x01000) {
     draw_text_ovf(msgs[lang_id][MSG_LOADER_RTCE], frame, 8, offy + rowh*optcnt, 224);
-    draw_central_text(msgs[lang_id][MSG_KNOB_DISABLED + rtcpatch_default], frame, colx, offy + rowh*optcnt++);
+    draw_central_option_text(msgs[lang_id][MSG_KNOB_DISABLED + rtcpatch_default], frame, colx, offy + rowh*optcnt++);
   }
 
   if (msk & 0x02000) {
@@ -1904,7 +1932,7 @@ void render_settings(volatile uint8_t *frame) {
     npf_snprintf(tmp, sizeof(tmp), "20%02d/%02d/%02d %02d:%02d",
       d.year, d.month, d.day, d.hour, d.min);
     draw_text_ovf(msgs[lang_id][MSG_DEF_RTCVAL], frame, 8, offy + rowh*optcnt, 224);
-    draw_central_text(tmp, frame, colx, offy + rowh*optcnt++);
+    draw_central_option_text(tmp, frame, colx, offy + rowh*optcnt++);
   }
 
   if (msk & 0x04000) {
@@ -1912,27 +1940,27 @@ void render_settings(volatile uint8_t *frame) {
                                           MSG_STILLRTC;
     npf_snprintf(tmp, sizeof(tmp), "< %s >", msgs[lang_id][spdmsg]);
     draw_text_ovf(msgs[lang_id][MSG_DEF_SPEED], frame, 8, offy + rowh*optcnt, 224);
-    draw_central_text(tmp, frame, colx, offy + rowh*optcnt++);
+    draw_central_option_text(tmp, frame, colx, offy + rowh*optcnt++);
   }
 
   if (msk & 0x08000) {
     draw_text_ovf(msgs[lang_id][MSG_LOADER_LOADP], frame, 8, offy + rowh*optcnt, 224);
-    draw_central_text(msgs[lang_id][MSG_DEF_LOADP0 + (autoload_default ^ 1)], frame, colx, offy + rowh*optcnt++);
+    draw_central_option_text(msgs[lang_id][MSG_DEF_LOADP0 + (autoload_default ^ 1)], frame, colx, offy + rowh*optcnt++);
   }
 
   if (msk & 0x10000) {
     draw_text_ovf(msgs[lang_id][MSG_LOADER_SAVEP], frame, 8, offy + rowh*optcnt, 224);
-    draw_central_text(msgs[lang_id][autosave_default ? MSG_DEF_SAVEP0 : MSG_DEF_SAVEP1], frame, colx, offy + rowh*optcnt++);
+    draw_central_option_text(msgs[lang_id][autosave_default ? MSG_DEF_SAVEP0 : MSG_DEF_SAVEP1], frame, colx, offy + rowh*optcnt++);
   }
 
   if (msk & 0x20000) {
     draw_text_ovf(msgs[lang_id][MSG_LOADER_PREFDS], frame, 8, offy + rowh*optcnt, 224);
-    draw_central_text(msgs[lang_id][autosave_prefer_ds ? MSG_KNOB_ENABLED : MSG_KNOB_DISABLED], frame, colx, offy + rowh*optcnt++);
+    draw_central_option_text(msgs[lang_id][autosave_prefer_ds ? MSG_KNOB_ENABLED : MSG_KNOB_DISABLED], frame, colx, offy + rowh*optcnt++);
   }
 
   if (msk & 0x40000) {
     draw_button_box(frame, 20, 220, 112, 132, smenu.set.selector == SettSave);
-    draw_central_text(msgs[lang_id][MSG_UIS_SAVE], frame, 120, 114);
+    draw_central_text_nudge_up(msgs[lang_id][MSG_UIS_SAVE], frame, 120, 114);
   }
 
   // Render bar below for help messge
@@ -1968,28 +1996,28 @@ void render_ui_settings(volatile uint8_t *frame) {
   char tmpbuf[64];
   npf_snprintf(tmpbuf, sizeof(tmpbuf), "< %lu >", menu_theme + 1U);
   draw_text_ovf(msgs[lang_id][MSG_UIS_THEME], frame, 8, 22, 224);
-  draw_central_text(tmpbuf, frame, colx, 22 );
+  draw_central_option_text(tmpbuf, frame, colx, 22 );
 
   npf_snprintf(tmpbuf, sizeof(tmpbuf), "< %s >", msgs[lang_id][MSG_LANG_NAME]);
   draw_text_ovf(msgs[lang_id][MSG_UIS_LANG], frame, 8, 22 + 20, 224);
-  draw_central_text(tmpbuf, frame, colx, 22 + 20 );
+  draw_central_option_text(tmpbuf, frame, colx, 22 + 20 );
 
   draw_text_ovf(msgs[lang_id][MSG_UIS_RECNT], frame, 8, 22 + 40, 224);
-  draw_central_text(msgs[lang_id][recent_menu ? MSG_KNOB_ENABLED : MSG_KNOB_DISABLED], frame, colx, 22 + 40 );
+  draw_central_option_text(msgs[lang_id][recent_menu ? MSG_KNOB_ENABLED : MSG_KNOB_DISABLED], frame, colx, 22 + 40 );
 
   npf_snprintf(tmpbuf, sizeof(tmpbuf), "< %s >", msgs[lang_id][MSG_UIS_SPD0 + anim_speed]);
   draw_text_ovf(msgs[lang_id][MSG_UIS_ANSPD], frame, 8, 22 + 60, 224);
-  draw_central_text(tmpbuf, frame, colx, 22 + 60 );
+  draw_central_option_text(tmpbuf, frame, colx, 22 + 60 );
 
   draw_text_ovf(msgs[lang_id][MSG_UIS_BHID], frame, 8, 22 + 80, 224);
-  draw_central_text(msgs[lang_id][hide_hidden ? MSG_KNOB_DISABLED : MSG_KNOB_ENABLED], frame, colx, 22 + 80 );
+  draw_central_option_text(msgs[lang_id][hide_hidden ? MSG_KNOB_DISABLED : MSG_KNOB_ENABLED], frame, colx, 22 + 80 );
 
   if (smenu.uiset.selector != UiSetSave)
     for (unsigned i = 0; i < 240; i += 16)
       render_icon_trans(i, 22 + smenu.uiset.selector * 20, 63);
 
   draw_button_box(frame, 20, 220, 132, 152, smenu.uiset.selector == UiSetSave);
-  draw_central_text(msgs[lang_id][MSG_UIS_SAVE], frame, 120, 134);
+  draw_central_text_nudge_up(msgs[lang_id][MSG_UIS_SAVE], frame, 120, 134);
 }
 
 void render_info(volatile uint8_t *frame) {
@@ -2054,7 +2082,7 @@ void render_tools(volatile uint8_t *frame) {
     draw_text_ovf(msgs[lang_id][MSG_TOOLS0_SDRAM + i], frame, 22, 26 + 22 * i, 144);
 
   smenu.anim_state = (smenu.anim_state + 1) & 255;
-  draw_central_text("▸", frame, 11 + (smenu.anim_state >> 6), 26 + 22 * smenu.tools.selector);
+  draw_central_text("▸", frame, 11 + (smenu.anim_state >> 6), 24 + 22 * smenu.tools.selector);
 
   for (unsigned i = 0; i < 240; i += 16)
     render_icon_trans(i, 26 + smenu.tools.selector * 22, 63);
@@ -3320,4 +3348,3 @@ void menu_keypress(unsigned newkeys) {
     keyfns[smenu.menu_tab](newkeys);
   }
 }
-

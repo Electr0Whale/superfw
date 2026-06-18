@@ -158,7 +158,7 @@ def parse_bdf(filepath):
             shift = 16 - h
         if shift < 0:
             shift = 0
-        g['columns'] = [c << shift for c in g['columns']]
+        g['columns'] = [((c << shift) & 0xFFFF) for c in g['columns']]
         g['bbx_h'] = h  # unchanged
 
     return glyphs, max_descent
@@ -261,7 +261,7 @@ def build_fixed_block(glyphs_in_range, start_cp, end_cp, col_count):
                 cols = colsource + [0x0000] * (col_count - len(colsource))
             else:
                 cols = colsource
-        data += b''.join(struct.pack('<H', x) for x in cols)
+        data += b''.join(struct.pack('<H', x & 0xFFFF) for x in cols)
     return data
 
 

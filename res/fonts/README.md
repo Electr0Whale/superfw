@@ -1,37 +1,21 @@
-# SuperFW Font Pack
+# SuperFW Font Build
 
-## Fusion Pixel 12px Monospaced (current)
+The standard font build path for this fork is:
 
-Source: https://github.com/TakWolf/fusion-pixel-font (MIT/OFL-1.1 license)
-
-Download the BDF release from:
-  https://github.com/TakWolf/fusion-pixel-font/releases/latest
-  (fusion-pixel-font-12px-monospaced-bdf-vYYYY.MM.DD.zip)
-
-Extract `fusion-pixel-12px-monospaced-zh_hans.bdf` and place it here.
-
-### Standard pack (fonts.pack):
-```
-python3 bdf_to_pack.py \
-  --bdf fusion-pixel-12px-monospaced-zh_hans.bdf \
-  --font-blocks cjk-sym,latin,latin-a,latin-b,greek,cyrilic,hiragana,katakana,cjk-uni,hangul \
-  --output ../fonts.pack
+```bash
+python3 res/fonts/build.py
 ```
 
-### Extended pack (fonts-ext.pack, for Chis board):
-Same as standard; both use pre-composed hangul.
+It generates:
 
-### Embedded font (font_embed.h):
-```
-python3 bdf_to_pack.py \
-  --bdf fusion-pixel-12px-monospaced-zh_hans.bdf \
-  --font-blocks ascii,check,triangles \
-  --output /tmp/embed-fonts.pack
+- `res/fonts.pack`
+- `res/fonts-ext.pack`
+- `src/fonts/font_embed.h`
 
-python3 pack_to_carray.py /tmp/embed-fonts.pack > ../../src/fonts/font_embed.h
-```
+Font sources:
 
-## Legacy (UNSCII / Unifont)
+- Primary: `wenquanyi_10pt.bdf`
+- Fallback: `fusion-pixel-12px-monospaced-zh_hans.bdf`
 
-The old generator.py and unscii-16.hex / hangul-blocks.hex files are kept for reference
-but are no longer used in the build pipeline.
+The legacy upstream generator is still kept for reference because upstream uses
+it, but this fork's committed font assets come from the BDF-based build above.

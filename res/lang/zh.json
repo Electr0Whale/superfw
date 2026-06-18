@@ -203,7 +203,6 @@
     "MSG_FMGR_UNHIDE": "取消隐藏文件或目录",
     "MSG_REMEMB_CFG_OK": "设置已保存!",
     "MSG_FWUP_BADFL": "升级固件错误!",
-    "MSG_FLASH_USAGE": "Flash 用量: %s/%s",
     "MSG_NOR_EMPTY": "空白NOR",
     "MSG_Q5_DELNORG": "从NOR中删除本游戏吗?",
     "MSG_Q6_CLRNOR": "你要格式化NOR吗?",

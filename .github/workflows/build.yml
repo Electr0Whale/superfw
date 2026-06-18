@@ -26,17 +26,7 @@ jobs:
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Generate fonts
-        run: |
-          python3 res/fonts/bdf_to_pack.py \
-            --bdf wenquanyi_10pt.bdf \
-            --font-blocks ascii,latin,latin-a,latin-b,gen-punct,greek,cyrilic,shapes,cjk-sym,cjk-compat,hiragana,katakana,fullwidth,cjk-uni,hangul \
-            --output res/fonts.pack
-          python3 res/fonts/bdf_to_pack.py \
-            --bdf wenquanyi_10pt.bdf \
-            --font-blocks ascii,shapes \
-            --output /tmp/embed.pack
-          python3 res/fonts/pack_to_carray.py /tmp/embed.pack > src/fonts/font_embed.h
-          cp res/fonts.pack res/fonts-ext.pack
+        run: python3 res/fonts/build.py
 
       - name: Build Chis (hardware)
         run: |

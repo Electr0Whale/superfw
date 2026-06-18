@@ -1,61 +1,33 @@
+SuperFW (WenQuanYi fork)
+========================
 
-> ⚠️ **WARNING / 警告**
->
-> **This fork was produced by vibe coding — using natural language prompts with**
-> **DeepSeek AI to describe desired changes, which the AI then implemented.**
-> **No manual code review has been performed.**
-> **Use at your own risk. The author (Electr0Whale) cannot guarantee correctness or safety.**
->
-> **该分支通过 vibe coding 方式生成——用自然语言向 DeepSeek AI 描述需求，**
-> **由 AI 完成代码编写。未经人工审查，请谨慎使用。**
-> **作者 (Electr0Whale) 无法保证代码的正确性或安全性。**
+This fork tracks upstream `davidgfnet/superfw` and keeps a narrow set of
+differences:
 
----
+- WenQuanYi 10pt as the primary UI font
+- Fusion Pixel BDF as fallback glyph coverage during font generation
+- `NO_SD_MODE=1` for emulator-oriented builds
+- Chinese as the default UI language
 
-# SuperFW (wqy10pt-font fork)
-
-基于 upstream v0.20 (251752e5)，替换为文泉驿 10pt 点阵宋体。
-Based on upstream v0.20 (251752e5), font replaced with WenQuanYi 10pt bitmap Song.
-
-## 改动 / Changes
-
-- **主字体 / Primary font**: 文泉驿 Bitmap Song 10pt (CJK 12px, Latin variable)
-- **备用字体 / Secondary font**: Fusion Pixel 12px (optional glyph fallback)
-- 可变宽度上限从 8 列扩展至 12 列 / Variable-width extended from 8 to 12 columns
-- 新增 `FLAG_FW12` 12px 固定宽度模式 / New FLAG_FW12 fixed-width mode
-- `NO_SD_MODE=1` 编译标志，支持 mGBA 等模拟器 / Build flag for emulator testing
-- 基线对齐垂直居中 / Baseline-aligned vertical centering
-- 中文为默认 UI 语言 / Chinese as default UI language
-- 支持语言：中文 / 日本語 / English / Русский / Bahasa Indonesia / Bahasa Melayu
-- Fullwidth Forms、Geometric Shapes、CJK Compatibility 等字形块补全
-
-## 截图 / Screenshots
-
-| 修改前 (upstream) / Before | 修改后 (wqy10pt) / After |
-|----------------------------|--------------------------|
-| ![upstream-lang](screenshots/upstream-lang.png) | ![wqy10pt-lang](screenshots/wqy10pt-lang.png) |
-
-| 实机 / Real Hardware |
-|----------------------|
-| ![hardware](screenshots/hardware.jpg) |
-
-## 编译 / Build
-
-```bash
-# 模拟器 / Emulator
-make BOARD=chis NO_SD_MODE=1 BUNDLE_GBC_EMULATOR=0 BUNDLE_OTHER_EMULATORS=0
-
-# Chis 真机 / Hardware
-make BOARD=chis BUNDLE_GBC_EMULATOR=0 BUNDLE_OTHER_EMULATORS=0
-```
-
-## 上游 / Upstream
-
+Upstream project:
 https://github.com/davidgfnet/superfw
 
----
+Build examples:
 
-## 原始 README / Original README
+```bash
+# Hardware
+make BOARD=chis BUNDLE_GBC_EMULATOR=0 BUNDLE_OTHER_EMULATORS=0
+
+# Emulator / no SD card init
+make BOARD=chis NO_SD_MODE=1 BUNDLE_GBC_EMULATOR=0 BUNDLE_OTHER_EMULATORS=0
+```
+
+The rest of this document is the original upstream README.
+
+Detailed fork maintenance notes for future AI agents and maintainers are in
+`FORK_MERGE_GUIDE.md`.
+
+---
 
 SuperFW
 =======
