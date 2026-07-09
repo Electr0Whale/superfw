@@ -5,8 +5,9 @@ on:
   push:
     branches:
       - 'master'
-    tags:
-      - '*'
+    tags-ignore:
+      - 'ci-*'
+      - '*wqy*'
     paths-ignore:
       - '**/*.md'
       - 'docs/**'
