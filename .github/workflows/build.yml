@@ -4,7 +4,8 @@ on:
   push:
     branches: [wqy10pt-font]
     paths-ignore:
-      - 'README.md'
+      - '**/*.md'
+      - 'docs/**'
       - 'screenshots/**'
   workflow_dispatch:
 
@@ -47,10 +48,12 @@ jobs:
           path: out/
 
       - name: Create release
+        if: github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
-          name: CI Build ${{ github.sha }}
+          name: SuperFW Chis WQY snapshot ${{ github.sha }}
           tag_name: ci-${{ github.run_number }}
           files: out/*
-          make_latest: true
+          prerelease: true
+          make_latest: false
           token: ${{ secrets.GITHUB_TOKEN }}
