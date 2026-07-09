@@ -9,6 +9,17 @@ differences:
 - `NO_SD_MODE=1` for emulator-oriented builds
 - Chinese as the default UI language
 
+UI comparison:
+
+The screenshots below compare the original Chis UI with this fork's
+WenQuanYi 10pt build. Matching row numbers show the same menu screen.
+
+| Screen | Original Chis | WenQuanYi 10pt fork |
+| --- | --- | --- |
+| 0 | <img src="docs/screenshots/chis-original-nosd-0.png" alt="Original Chis no-SD screenshot 0" width="240"> | <img src="docs/screenshots/chis-wqy10pt-nosd-0.png" alt="WenQuanYi 10pt no-SD screenshot 0" width="240"> |
+| 1 | <img src="docs/screenshots/chis-original-nosd-1.png" alt="Original Chis no-SD screenshot 1" width="240"> | <img src="docs/screenshots/chis-wqy10pt-nosd-1.png" alt="WenQuanYi 10pt no-SD screenshot 1" width="240"> |
+| 2 | <img src="docs/screenshots/chis-original-nosd-2.png" alt="Original Chis no-SD screenshot 2" width="240"> | <img src="docs/screenshots/chis-wqy10pt-nosd-2.png" alt="WenQuanYi 10pt no-SD screenshot 2" width="240"> |
+
 Upstream project:
 https://github.com/davidgfnet/superfw
 
