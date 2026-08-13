@@ -37,10 +37,10 @@ static void build_cube(void) {
 }
 
 // Map a BMP 16-bit pixel to its nearest cube index (already biased by base).
-// The EZ-Flash-Omega pack stores pixels GBA-native (X1B5G5R5): red is the LOW
-// 5 bits, blue the high 5 bits (not the standard X1R5G5B5 BMP layout).
+// The packs are standard X1R5G5B5 BMPs: red is the HIGH 5 bits, blue the low
+// 5 bits (this was previously read GBA-native, which swapped red and blue).
 static inline uint8_t rgb555_to_cube(unsigned v) {
-  unsigned r = v & 0x1F, g = (v >> 5) & 0x1F, b = (v >> 10) & 0x1F;
+  unsigned r = (v >> 10) & 0x1F, g = (v >> 5) & 0x1F, b = v & 0x1F;
   return CUBE_PAL_BASE + (((r * 6) >> 5) * 36 + ((g * 6) >> 5) * 6 + ((b * 6) >> 5));
 }
 
