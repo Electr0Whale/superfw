@@ -29,6 +29,7 @@ char *superfw_strcat(char *dest, const char *src);
 size_t superfw_strlen(const char *s);
 
 int main() {
+  char buf[64];
   const char *s = "hello world";
   const char *emptystr = "";
   const char *with_null = "abc\0def";
@@ -96,6 +97,32 @@ int main() {
   assert(superfw_strrchr(s, '\0') == s + strlen(s));
   assert(superfw_strrchr(emptystr, '\0') == emptystr);
   assert(superfw_strrchr(emptystr, 'a') == NULL);
-}
 
+  strcpy(buf, "hello");
+  assert(superfw_strcat(buf, " world") == buf);
+  assert(superfw_strcmp(buf, "hello world") == 0);
+
+  strcpy(buf, "");
+  superfw_strcat(buf, "foo");
+  assert(superfw_strcmp(buf, "foo") == 0);
+
+  strcpy(buf, "foo");
+  superfw_strcat(buf, "");
+  assert(superfw_strcmp(buf, "foo") == 0);
+
+  strcpy(buf, "");
+  superfw_strcat(buf, "");
+  assert(superfw_strcmp(buf, "") == 0);
+
+  strcpy(buf, "a");
+  superfw_strcat(buf, "b");
+  superfw_strcat(buf, "c");
+  superfw_strcat(buf, "d");
+  assert(superfw_strcmp(buf, "abcd") == 0);
+
+  strcpy(buf, "abc");
+  superfw_strcat(buf, "def");
+  assert(superfw_strcmp(buf, "abcdef") == 0);
+  assert(superfw_strlen(buf) == 6);
+}
 

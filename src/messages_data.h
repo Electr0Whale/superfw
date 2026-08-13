@@ -155,6 +155,9 @@ enum TranslationID {
   MSG_SAVETYPE_SRAM,
   MSG_SAVE_TYPE_NR,
   MSG_SAVE_TYPE_PT,
+#ifdef SUPPORT_NORGAMES
+  MSG_SAVE_TYPE_PTX,
+#endif
   MSG_SAVOPT_MSG0,
   MSG_SAVOPT_MSG1,
   MSG_SAVOPT_MSG2,
@@ -172,12 +175,19 @@ enum TranslationID {
   MSG_SETT_REMEMB,
   MSG_SETT_SAVEBK,
   MSG_SETT_SAVET,
+#ifdef SUPPORT_NORGAMES
+  MSG_SETT_SAVETX,
+#endif
   MSG_SETT_STATET,
+#ifdef SUPPORT_NORGAMES
+  MSG_SETT_VERNOR,
+#endif
   MSG_SET_TITL1,
   MSG_SET_TITL2,
   MSG_SRAMTST_FAIL,
   MSG_SRAMTST_OK,
   MSG_SRAMTST_RDY,
+  MSG_STATE_TYPE_PT,
   MSG_STILLRTC,
   MSG_TOOLS0_SDRAM,
   MSG_TOOLS1_SRAM,
@@ -199,6 +209,9 @@ enum TranslationID {
   MSG_UIS_SPD3,
   MSG_UIS_SPD4,
   MSG_UIS_THEME,
+#ifdef SUPPORT_NORGAMES
+  MSG_VERNOR_I,
+#endif
 };
 const char * const msg_en[] = {
   /* MSG_BACKUP_I         */ "Keep the last N save files",
@@ -357,6 +370,9 @@ const char * const msg_en[] = {
   /* MSG_SAVETYPE_SRAM    */ "SRAM",
   /* MSG_SAVE_TYPE_NR     */ ".sav in the same dir as the ROM",
   /* MSG_SAVE_TYPE_PT     */ "Save file lives in %s dir",
+#ifdef SUPPORT_NORGAMES
+  /* MSG_SAVE_TYPE_PTX    */ "Save file lives (for in-flash games) in %s dir",
+#endif
   /* MSG_SAVOPT_MSG0      */ "SRAM was written to sav file!",
   /* MSG_SAVOPT_MSG1      */ ".sav was loaded into SRAM!",
   /* MSG_SAVOPT_MSG2      */ ".sav was cleared!",
@@ -374,12 +390,19 @@ const char * const msg_en[] = {
   /* MSG_SETT_REMEMB      */ "Remember config",
   /* MSG_SETT_SAVEBK      */ "Save backup #",
   /* MSG_SETT_SAVET       */ "Save path",
+#ifdef SUPPORT_NORGAMES
+  /* MSG_SETT_SAVETX      */ "Flash saves",
+#endif
   /* MSG_SETT_STATET      */ "Savestate path",
+#ifdef SUPPORT_NORGAMES
+  /* MSG_SETT_VERNOR      */ "Verify flashing",
+#endif
   /* MSG_SET_TITL1        */ "Global settings",
   /* MSG_SET_TITL2        */ "Default GBA settings",
   /* MSG_SRAMTST_FAIL     */ "SRAM test FAILED!",
   /* MSG_SRAMTST_OK       */ "SRAM test passed!",
   /* MSG_SRAMTST_RDY      */ "You might now power off!",
+  /* MSG_STATE_TYPE_PT    */ "Savestate files live in %s dir",
   /* MSG_STILLRTC         */ "Frozen",
   /* MSG_TOOLS0_SDRAM     */ "SDRAM memory test",
   /* MSG_TOOLS1_SRAM      */ "SRAM memory test",
@@ -401,6 +424,9 @@ const char * const msg_en[] = {
   /* MSG_UIS_SPD3         */ "Fast",
   /* MSG_UIS_SPD4         */ "Very fast",
   /* MSG_UIS_THEME        */ "Theme color",
+#ifdef SUPPORT_NORGAMES
+  /* MSG_VERNOR_I         */ "Checks ROMs written to flash",
+#endif
 };
 const char * const msg_zh[] = {
   /* MSG_BACKUP_I         */ "备份最近使用的若干个存档",
@@ -559,6 +585,9 @@ const char * const msg_zh[] = {
   /* MSG_SAVETYPE_SRAM    */ "SRAM",
   /* MSG_SAVE_TYPE_NR     */ ".sav与ROM放在同一目录",
   /* MSG_SAVE_TYPE_PT     */ "将存档放置在%s目录",
+#ifdef SUPPORT_NORGAMES
+  /* MSG_SAVE_TYPE_PTX    */ "存档文件（Flash 内游戏）位于 %s 目录",
+#endif
   /* MSG_SAVOPT_MSG0      */ "SRAM已写入到.sav!",
   /* MSG_SAVOPT_MSG1      */ ".sav已写入到SRAM中!",
   /* MSG_SAVOPT_MSG2      */ ".sav已清除!",
@@ -576,12 +605,19 @@ const char * const msg_zh[] = {
   /* MSG_SETT_REMEMB      */ "保存设置",
   /* MSG_SETT_SAVEBK      */ "存档备份 #",
   /* MSG_SETT_SAVET       */ "存档目录",
+#ifdef SUPPORT_NORGAMES
+  /* MSG_SETT_SAVETX      */ "Flash 存档",
+#endif
   /* MSG_SETT_STATET      */ "即时存档目录",
+#ifdef SUPPORT_NORGAMES
+  /* MSG_SETT_VERNOR      */ "校验写入",
+#endif
   /* MSG_SET_TITL1        */ "全局设置",
   /* MSG_SET_TITL2        */ "默认 GBA 设置",
   /* MSG_SRAMTST_FAIL     */ "SRAM测试失败!",
   /* MSG_SRAMTST_OK       */ "SRAM测试通过!",
   /* MSG_SRAMTST_RDY      */ "现在可以关机了!",
+  /* MSG_STATE_TYPE_PT    */ "即时存档文件位于 %s 目录",
   /* MSG_STILLRTC         */ "静止",
   /* MSG_TOOLS0_SDRAM     */ "SDRAM测试",
   /* MSG_TOOLS1_SRAM      */ "SRAM测试",
@@ -603,6 +639,9 @@ const char * const msg_zh[] = {
   /* MSG_UIS_SPD3         */ "快",
   /* MSG_UIS_SPD4         */ "非常快",
   /* MSG_UIS_THEME        */ "主题颜色",
+#ifdef SUPPORT_NORGAMES
+  /* MSG_VERNOR_I         */ "校验写入 Flash 的 ROM",
+#endif
 };
 const char * const msg_ja[] = {
   /* MSG_BACKUP_I         */ "Keep the last N save files",
@@ -761,6 +800,9 @@ const char * const msg_ja[] = {
   /* MSG_SAVETYPE_SRAM    */ "SRAM",
   /* MSG_SAVE_TYPE_NR     */ ".sav in the same dir as the ROM",
   /* MSG_SAVE_TYPE_PT     */ "Save file lives in %s dir",
+#ifdef SUPPORT_NORGAMES
+  /* MSG_SAVE_TYPE_PTX    */ "セーブファイル（フラッシュ内ゲーム用）は %s フォルダ",
+#endif
   /* MSG_SAVOPT_MSG0      */ "SRAM was written to sav file!",
   /* MSG_SAVOPT_MSG1      */ ".sav was loaded into SRAM!",
   /* MSG_SAVOPT_MSG2      */ ".sav was cleared!",
@@ -778,12 +820,19 @@ const char * const msg_ja[] = {
   /* MSG_SETT_REMEMB      */ "Remember config",
   /* MSG_SETT_SAVEBK      */ "Save backup #",
   /* MSG_SETT_SAVET       */ "Save path",
+#ifdef SUPPORT_NORGAMES
+  /* MSG_SETT_SAVETX      */ "フラッシュセーブ",
+#endif
   /* MSG_SETT_STATET      */ "Savestate path",
+#ifdef SUPPORT_NORGAMES
+  /* MSG_SETT_VERNOR      */ "書き込み検証",
+#endif
   /* MSG_SET_TITL1        */ "Global settings",
   /* MSG_SET_TITL2        */ "Default GBA settings",
   /* MSG_SRAMTST_FAIL     */ "SRAM test FAILED!",
   /* MSG_SRAMTST_OK       */ "SRAM test passed!",
   /* MSG_SRAMTST_RDY      */ "You might now power off!",
+  /* MSG_STATE_TYPE_PT    */ "ステートセーブファイルは %s フォルダ",
   /* MSG_STILLRTC         */ "Frozen",
   /* MSG_TOOLS0_SDRAM     */ "SDRAM memory test",
   /* MSG_TOOLS1_SRAM      */ "SRAM memory test",
@@ -805,6 +854,9 @@ const char * const msg_ja[] = {
   /* MSG_UIS_SPD3         */ "Fast",
   /* MSG_UIS_SPD4         */ "Very fast",
   /* MSG_UIS_THEME        */ "Theme color",
+#ifdef SUPPORT_NORGAMES
+  /* MSG_VERNOR_I         */ "フラッシュ書き込み後のROMを検証",
+#endif
 };
 const char * const msg_ru[] = {
   /* MSG_BACKUP_I         */ "Количество файлов для сохранения",
@@ -963,6 +1015,9 @@ const char * const msg_ru[] = {
   /* MSG_SAVETYPE_SRAM    */ "SRAM",
   /* MSG_SAVE_TYPE_NR     */ "Сохранить в ту же папку, что и файл",
   /* MSG_SAVE_TYPE_PT     */ "Сохранять файлы в папке %s",
+#ifdef SUPPORT_NORGAMES
+  /* MSG_SAVE_TYPE_PTX    */ "Файл сохранения (для игр во флеше) находится в %s",
+#endif
   /* MSG_SAVOPT_MSG0      */ "SRAM был записан в файл!",
   /* MSG_SAVOPT_MSG1      */ ".sav был загружен в SRAM!",
   /* MSG_SAVOPT_MSG2      */ ".sav был очищен!",
@@ -980,12 +1035,19 @@ const char * const msg_ru[] = {
   /* MSG_SETT_REMEMB      */ "Память настр.",
   /* MSG_SETT_SAVEBK      */ "Кол. резервн. копий",
   /* MSG_SETT_SAVET       */ "Путь сохранений",
+#ifdef SUPPORT_NORGAMES
+  /* MSG_SETT_SAVETX      */ "Сохранения Flash",
+#endif
   /* MSG_SETT_STATET      */ "Путь к сох. сост.",
+#ifdef SUPPORT_NORGAMES
+  /* MSG_SETT_VERNOR      */ "Проверка записи",
+#endif
   /* MSG_SET_TITL1        */ "Основные настройки",
   /* MSG_SET_TITL2        */ "Настройки GBA по умолчанию",
   /* MSG_SRAMTST_FAIL     */ "SRAM тест провален!",
   /* MSG_SRAMTST_OK       */ "SRAM тест пройден!",
   /* MSG_SRAMTST_RDY      */ "Консоль можно выключать!",
+  /* MSG_STATE_TYPE_PT    */ "Файлы сохранений состояний находятся в %s",
   /* MSG_STILLRTC         */ "Заморожено",
   /* MSG_TOOLS0_SDRAM     */ "Тест памяти SDRAM",
   /* MSG_TOOLS1_SRAM      */ "Тест памяти SRAM",
@@ -1007,6 +1069,9 @@ const char * const msg_ru[] = {
   /* MSG_UIS_SPD3         */ "Быстро",
   /* MSG_UIS_SPD4         */ "Оч. быстро",
   /* MSG_UIS_THEME        */ "Цветовая тема",
+#ifdef SUPPORT_NORGAMES
+  /* MSG_VERNOR_I         */ "Проверяет ROM, записанные во флеш",
+#endif
 };
 const char * const msg_id[] = {
   /* MSG_BACKUP_I         */ "Mencadang berkas .sav ke nomor",
@@ -1165,6 +1230,9 @@ const char * const msg_id[] = {
   /* MSG_SAVETYPE_SRAM    */ "SRAM",
   /* MSG_SAVE_TYPE_NR     */ ".sav akan sefolder dengan ROM",
   /* MSG_SAVE_TYPE_PT     */ "Simpanan akan ada di %s",
+#ifdef SUPPORT_NORGAMES
+  /* MSG_SAVE_TYPE_PTX    */ "File simpanan (untuk game di flash) ada di direktori %s",
+#endif
   /* MSG_SAVOPT_MSG0      */ "SRAM ditulis ke berkas .sav!",
   /* MSG_SAVOPT_MSG1      */ ".sav dimuat ke SRAM!",
   /* MSG_SAVOPT_MSG2      */ ".sav dikosongkan!",
@@ -1182,12 +1250,19 @@ const char * const msg_id[] = {
   /* MSG_SETT_REMEMB      */ "Ingat setelan",
   /* MSG_SETT_SAVEBK      */ "Cadang .sav ke",
   /* MSG_SETT_SAVET       */ "Jalur simpanan",
+#ifdef SUPPORT_NORGAMES
+  /* MSG_SETT_SAVETX      */ "Simpanan Flash",
+#endif
   /* MSG_SETT_STATET      */ "Jalur savestate",
+#ifdef SUPPORT_NORGAMES
+  /* MSG_SETT_VERNOR      */ "Verifikasi tulis",
+#endif
   /* MSG_SET_TITL1        */ "Pengaturan global",
   /* MSG_SET_TITL2        */ "Pengaturan GBA bawaan",
   /* MSG_SRAMTST_FAIL     */ "Uji SRAM GAGAL!",
   /* MSG_SRAMTST_OK       */ "Uji SRAM lancar!",
   /* MSG_SRAMTST_RDY      */ "Sudah boleh matikan daya!",
+  /* MSG_STATE_TYPE_PT    */ "File savestate ada di direktori %s",
   /* MSG_STILLRTC         */ "Frozen",
   /* MSG_TOOLS0_SDRAM     */ "Uji memori SDRAM",
   /* MSG_TOOLS1_SRAM      */ "Uji memori SRAM",
@@ -1209,6 +1284,9 @@ const char * const msg_id[] = {
   /* MSG_UIS_SPD3         */ "Cepat",
   /* MSG_UIS_SPD4         */ "Amat cepat",
   /* MSG_UIS_THEME        */ "Warna tema",
+#ifdef SUPPORT_NORGAMES
+  /* MSG_VERNOR_I         */ "Periksa ROM yang ditulis ke flash",
+#endif
 };
 const char * const msg_ms[] = {
   /* MSG_BACKUP_I         */ "Menyandar fail .sav ke nombor",
@@ -1367,6 +1445,9 @@ const char * const msg_ms[] = {
   /* MSG_SAVETYPE_SRAM    */ "SRAM",
   /* MSG_SAVE_TYPE_NR     */ ".sav dalam satu folder dengan ROM",
   /* MSG_SAVE_TYPE_PT     */ "Simpanan berada dalam %s",
+#ifdef SUPPORT_NORGAMES
+  /* MSG_SAVE_TYPE_PTX    */ "Fail simpanan (untuk permainan dalam flash) berada dalam direktori %s",
+#endif
   /* MSG_SAVOPT_MSG0      */ "SRAM ditulis ke fail .sav!",
   /* MSG_SAVOPT_MSG1      */ ".sav dimuatkan dalam SRAM!",
   /* MSG_SAVOPT_MSG2      */ ".sav dikosongkan!",
@@ -1384,12 +1465,19 @@ const char * const msg_ms[] = {
   /* MSG_SETT_REMEMB      */ "Ingat konfig",
   /* MSG_SETT_SAVEBK      */ "Sandar .sav ke",
   /* MSG_SETT_SAVET       */ "Laluan simpanan",
+#ifdef SUPPORT_NORGAMES
+  /* MSG_SETT_SAVETX      */ "Simpanan Flash",
+#endif
   /* MSG_SETT_STATET      */ "Laluan savestate",
+#ifdef SUPPORT_NORGAMES
+  /* MSG_SETT_VERNOR      */ "Sahkan penulisan",
+#endif
   /* MSG_SET_TITL1        */ "Tetapan global",
   /* MSG_SET_TITL2        */ "Tetapan GBA lalai",
   /* MSG_SRAMTST_FAIL     */ "Ujian SRAM GAGAL!",
   /* MSG_SRAMTST_OK       */ "Ujian SRAM lulus!",
   /* MSG_SRAMTST_RDY      */ "Kini boleh matikan kuasa!",
+  /* MSG_STATE_TYPE_PT    */ "Fail savestate berada dalam direktori %s",
   /* MSG_STILLRTC         */ "Frozen",
   /* MSG_TOOLS0_SDRAM     */ "Ujian ingatan SDRAM",
   /* MSG_TOOLS1_SRAM      */ "Ujian ingatan SRAM",
@@ -1411,6 +1499,9 @@ const char * const msg_ms[] = {
   /* MSG_UIS_SPD3         */ "Laju",
   /* MSG_UIS_SPD4         */ "Amat laju",
   /* MSG_UIS_THEME        */ "Warna tema",
+#ifdef SUPPORT_NORGAMES
+  /* MSG_VERNOR_I         */ "Semak ROM yang ditulis ke flash",
+#endif
 };
 const char * const * const msgs[] = {
   msg_en,

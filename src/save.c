@@ -22,12 +22,15 @@
 
 #include "gbahw.h"
 #include "util.h"
+#include "compiler.h"
 #include "settings.h"
 #include "supercard_driver.h"
 #include "fatfs/ff.h"
 #include "common.h"
 #include "save.h"
 #include "nanoprintf.h"
+
+#pragma GCC optimize ("Os")
 
 // All reading/writing of SRAM should be centralized here, except for IGM/DirSav/Patches.
 
@@ -402,7 +405,7 @@ bool copy_save_contiguous_file(const char *fn, const char *dest, unsigned size) 
   return true;
 }
 
-__attribute__((noinline))
+NOINLINE
 unsigned prepare_sram_based_savegame(t_sram_load_policy loadp, t_sram_save_policy savep, const char *savefn) {
   // Clear the SRAM before loading any data (avoid random garbage!), unless in manual mode ofc.
   if (loadp != SaveLoadDisable)
@@ -418,7 +421,8 @@ unsigned prepare_sram_based_savegame(t_sram_load_policy loadp, t_sram_save_polic
   if (savep == SaveReboot) {
     // Program auto-save on reboot, write basename to the config file
     char savetmpl[MAX_FN_LEN];
-    sram_template_filename_calc(savefn, "", savetmpl);
+    strcpy(savetmpl, savefn);
+    replace_extension(savetmpl, "");
     if (!program_sram_dump(savetmpl, backup_sram_default))
       return ERR_SAVE_CANTWRITE;
   }
@@ -430,8 +434,12 @@ unsigned prepare_sram_based_savegame(t_sram_load_policy loadp, t_sram_save_polic
   return 0;
 }
 
-__attribute__((noinline))
+NOINLINE
 unsigned prepare_savegame(t_sram_load_policy loadp, t_sram_save_policy savep, EnumSavetype stype, t_dirsave_info *dsinfo, const char *savefn) {
+
+  // Ensure the main superfw dir exists
+  f_mkdir(SUPERFW_DIR);
+
   // Branch on the two main saving modes: DirectSave and SRAM-based saving.
   if (savep == SaveDirect) {
     if (loadp == SaveLoadDisable)

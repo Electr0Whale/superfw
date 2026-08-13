@@ -3,14 +3,12 @@
 
 import os, sys, json
 
-
 def _force_utf8_stdout():
   # On Windows, redirected stdout may default to a legacy code page and corrupt
   # generated headers. Force UTF-8 so checked-in assets and build outputs stay
   # deterministic across shells.
   if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="strict")
-
 
 _force_utf8_stdout()
 
@@ -115,6 +113,7 @@ en_strings = [
   "MSG_BOOT_TYPE_I1":  "Boots to BIOS (GBA reset)",
   "MSG_SAVE_TYPE_NR":  ".sav in the same dir as the ROM",
   "MSG_SAVE_TYPE_PT":  "Save file lives in %s dir",
+  "MSG_STATE_TYPE_PT": "Savestate files live in %s dir",
   "MSG_BACKUP_I":      "Keep the last N save files",
   "MSG_FASTSD_I":      "Use a fast ROM loading mechanism. Can result in crashes or incorrect reads in some devices",
   "MSG_FASTEW_I":      "Overclock EWRAM for some extra performance. Not available on NDS or GBA Micro",
@@ -233,16 +232,20 @@ en_strings = [
   "MSG_DBPINFO":   "Patch database version info",
   }),
   ("SUPPORT_NORGAMES", {
-  "MSG_NOR_EMPTY":  "Flash is empty",
-  "MSG_Q5_DELNORG": "Delete this game from flash memory?",
-  "MSG_Q6_CLRNOR":  "Do you want to format the internal flash memory?",
-  "MSG_ERR_NORUPD": "Flash write failed!",                 # alertmsg
-  "MSG_ERR_NORSPC": "Insufficient disk space!",            # alertmsg
-  "MSG_NOR_WRITE":  "Write game to flash",
-  "MSG_NOR_LAUNCH": "Launch flash game",
-  "MSG_NOR_WROK":   "Game flashed successfully!",          # alertmsg
-  "MSG_NOR_CLOK":   "Flash erased successfully!",          # alertmsg
-  "MSG_TOOLS5_FCLR":"Erase flash",
+  "MSG_NOR_EMPTY":    "Flash is empty",
+  "MSG_Q5_DELNORG":   "Delete this game from flash memory?",
+  "MSG_Q6_CLRNOR":    "Do you want to format the internal flash memory?",
+  "MSG_ERR_NORUPD":   "Flash write failed!",                 # alertmsg
+  "MSG_ERR_NORSPC":   "Insufficient disk space!",            # alertmsg
+  "MSG_NOR_WRITE":    "Write game to flash",
+  "MSG_NOR_LAUNCH":   "Launch flash game",
+  "MSG_NOR_WROK":     "Game flashed successfully!",          # alertmsg
+  "MSG_NOR_CLOK":     "Flash erased successfully!",          # alertmsg
+  "MSG_TOOLS5_FCLR":  "Erase flash",
+  "MSG_SETT_SAVETX":  "Flash saves",
+  "MSG_SAVE_TYPE_PTX":"Save file lives (for in-flash games) in %s dir",
+  "MSG_SETT_VERNOR":  "Verify flashing",
+  "MSG_VERNOR_I":     "Checks ROMs written to flash",
   }),
 ]
 
@@ -389,4 +392,5 @@ elif len(sys.argv) > 1 and sys.argv[1] == "h":
       c = ord(l[0]) | (ord(l[1]) << 8)
       print("  0x%04x,     // %s" % (c, l))
     print("};")
+
 

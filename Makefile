@@ -54,7 +54,7 @@ else
   $(error No valid board specified in BOARD)
 endif
 
-# Emulator mode: no compression (to skip upkr/cargo), large ROM size.
+# Emulator mode: no compression, large ROM size.
 ifeq ($(NO_SD_MODE),1)
   COMPRESS_FIRMWARE = 0
   MAXFSIZE = 4096
@@ -152,6 +152,7 @@ INFILES=src/gba_ewram_crt0.S \
         src/patcher.c \
         src/patches.S \
         src/menu.c \
+        src/recent.c \
         src/cheats.c \
         src/flash.c \
         src/sha256.c \
@@ -219,26 +220,26 @@ $(FONT_PACK) $(FONT_EXT_PACK) $(FONT_EMBED): res/fonts/build.py \
 		res/fonts/bdf_to_pack.py res/fonts/combine_fonts.py res/fonts/pack_to_carray.py
 	./res/fonts/build.py
 
-%.gba.comp:	%.gba.bin apultra/apultra
-	./apultra/apultra $< $@
+firmware.ewram.gba.comp:	firmware.ewram.gba ./upkr.elf
+	./upkr.elf -l $(COMPRESSION_RATIO) $< $@
 
-firmware.ewram.gba.comp:	firmware.ewram.gba ./upkr/target/release/upkr
-	./upkr/target/release/upkr -l $(COMPRESSION_RATIO) $< $@
+%.gba.comp:	%.gba.bin ./upkr.elf
+	./upkr.elf -l $(COMPRESSION_RATIO) $< $@
 
-%.db.comp:	%.db ./upkr/target/release/upkr
-	./upkr/target/release/upkr -l $(COMPRESSION_RATIO) $< $@
+%.db.comp:	%.db ./upkr.elf
+	./upkr.elf -l $(COMPRESSION_RATIO) $< $@
 
-%.pack.comp:	%.pack apultra/apultra
-	./apultra/apultra $< $@
+%.pack.comp:	%.pack apultra.elf
+	./apultra.elf $< $@
 
 %.ld.i:	%.ld
-	$(PREFIX)cpp $< -o $@
+	cpp $< -o $@
 
-apultra/apultra:
-	make -C apultra
+apultra.elf:	tools/apultra.cc
+	g++ -std=c++20 -O3 $< -o $@
 
-upkr/target/release/upkr:
-	cd upkr/ && cargo build --release
+upkr.elf:	tools/upkr.cc
+	g++ -o $@ $< -O3 -ffast-math
 
 # Convenience target: build for emulators (skips SD card init).
 emu:

@@ -27,6 +27,7 @@
 #include "fonts/font_render.h"
 #include "common.h"
 #include "fatfs/ff.h"
+#include "flash.h"
 
 // Global variables
 FATFS sdfs;          // FatFS mounted filesystem
