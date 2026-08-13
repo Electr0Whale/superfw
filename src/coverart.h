@@ -2,7 +2,7 @@
  * Cover-art / title-screen preview for the ROM browser.
  *
  * Reads EZ-Flash-Omega style thumbnails directly from the SD card:
- *   /IMGS/{c0}/{c1}/{CODE}.bmp  (120x80, 16bpp X1R5G5B5 BMP, keyed by GBA game code)
+ *   /IMGS/{c0}/{c1}/{CODE}.bmp  (120x75, 16bpp X1R5G5B5 BMP, keyed by GBA game code)
  * Each pixel is mapped on the fly to a fixed 6x6x6 (216 color) palette cube that
  * lives in the free BG palette indices 20..235, and blitted into a bottom-right
  * pane of the Mode-4 menu framebuffer (EZ-Flash-Omega style).
@@ -15,7 +15,7 @@
 
 // Native thumbnail size (matches the EZ-Omega .bmp pack).
 #define COVER_W          120
-#define COVER_H          80
+#define COVER_H          75
 
 // Fixed 6x6x6 color cube, placed in the free BG palette range 20..235
 // (theme=16..19, logo=1..15, IGM=240..244, selector=255 are left untouched).
@@ -24,7 +24,7 @@
 
 // Bottom-right pane, just above the y=144 footer bar.
 #define COVER_PANE_X     (240 - COVER_W - 2)    // 118
-#define COVER_PANE_Y     (144 - COVER_H - 2)    // 62
+#define COVER_PANE_Y     (144 - COVER_H - 2)    // 67
 
 // Forget the cached cover (call when the directory listing is rebuilt or the
 // feature is toggled off).

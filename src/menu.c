@@ -1357,7 +1357,7 @@ void render_recent(volatile uint8_t *frame) {
 
   unsigned selrowy = (smenu.recent.selector - smenu.recent.seloff + 1) * 16;
   unsigned hlright = (cover_on && selrowy + 15 >= COVER_PANE_Y) ? COVER_PANE_X : 240;
-  for (unsigned i = 0; i < hlright; i += 16)
+  for (unsigned i = 0; i + 16 <= hlright; i += 16)
     render_icon_trans(i, selrowy, 63);
 
   if (cover_on) {
@@ -1410,7 +1410,7 @@ void render_flashbrowser(volatile uint8_t *frame) {
 
     unsigned selrowy = (smenu.fbrowser.selector - smenu.fbrowser.seloff + 1) * 16;
     unsigned hlright = (cover_on && selrowy + 15 >= COVER_PANE_Y) ? COVER_PANE_X : 240;
-    for (unsigned i = 0; i < hlright; i += 16)
+    for (unsigned i = 0; i + 16 <= hlright; i += 16)
       render_icon_trans(i, selrowy, 63);
   }
 
@@ -1487,7 +1487,7 @@ void render_browser(volatile uint8_t *frame) {
 
     unsigned selrowy = (smenu.browser.selector - smenu.browser.seloff + 1) * 16;
     unsigned hlright = (cover_on && selrowy + 15 >= COVER_PANE_Y) ? COVER_PANE_X : 240;
-    for (unsigned i = 0; i < hlright; i += 16)
+    for (unsigned i = 0; i + 16 <= hlright; i += 16)
       render_icon_trans(i, selrowy, 63);
   }
 

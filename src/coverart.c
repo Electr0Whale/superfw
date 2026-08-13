@@ -1,7 +1,7 @@
 /*
  * Cover-art / title-screen preview for the ROM browser.  See coverart.h.
  *
- * Reads "/IMGS/{c0}/{c1}/{CODE}.bmp" (120x80, 16bpp X1R5G5B5) directly off the SD
+ * Reads "/IMGS/{c0}/{c1}/{CODE}.bmp" (120x75, 16bpp X1R5G5B5) directly off the SD
  * card, maps each pixel to a fixed 6x6x6 palette cube (MEM_PALETTE[20..235]) and
  * caches the resulting 8bpp image for fast per-frame blits.
  */
