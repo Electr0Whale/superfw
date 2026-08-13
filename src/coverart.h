@@ -34,9 +34,14 @@
 // feature is toggled off).
 void coverart_invalidate(void);
 
-// Ensure the cover for the currently selected ROM is loaded. Only touches the
-// SD card when the selection actually changed, so it is cheap to call per frame.
-// Pass is_gba=false (or an empty path) to clear the cover for non-ROM entries.
+// Advance the async cover load by one step. Call once per rendered frame;
+// each step does at most one SD operation or a small read chunk so the menu
+// never blocks on the card.
+void coverart_pump(void);
+
+// Request the cover for the currently selected ROM. Cheap: only records the
+// request (the actual SD traffic happens in coverart_pump). Pass is_gba=false
+// (or an empty path) to clear the cover for non-ROM entries.
 void coverart_update(const char *rom_fullpath, uint32_t filesize, bool is_gba);
 
 // Like coverart_update but keyed directly by a stored 4-char game code (no ROM

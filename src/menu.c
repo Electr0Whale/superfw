@@ -2187,6 +2187,9 @@ void menu_render(unsigned fcnt) {
   // Render the main area
   dma_memset16(&frame[16*SCREEN_WIDTH], dup8(BG_COLOR), SCREEN_WIDTH*(SCREEN_HEIGHT-16) / 2);
 
+  // Advance any pending cover load one step (never blocks for long).
+  coverart_pump();
+
   if (spop.qpop.message)
     render_popupq(frame, fcnt);
   else if (spop.rtcpop.callback)

@@ -5,6 +5,10 @@
  * the SD card, quantizes it into a per-image adaptive palette (median-cut over
  * a 4:4:4 histogram, refined to exact 5-bit means; MEM_PALETTE[20..235]) and
  * caches the resulting 8bpp image for fast per-frame blits.
+ *
+ * All SD traffic runs through a per-frame state machine (coverart_pump), so a
+ * cover load never blocks the render loop: each step does at most one file
+ * operation or a small read chunk, and the menu keeps animating in between.
  */
 #include <string.h>
 #include <stdbool.h>
@@ -18,8 +22,8 @@
 #define COVER_DIR  "/IMGS"
 
 // Quantized-cover cache: the first load of a cover runs the histogram +
-// median-cut + remap (~60ms) and stores the result so later loads only read
-// the cached pixels + palette off the SD card.
+// median-cut + remap and stores the result so later loads only read the
+// cached pixels + palette off the SD card.
 // Layout (little-endian): magic "CVR1", u16 width, u16 height, u32 src_size,
 // u16 src_date, u16 src_time (source BMP stat, for invalidation), then the
 // 216-color palette and the 8bpp pixels row by row.
@@ -33,7 +37,7 @@ static EWRAM_BSS __attribute__((aligned(4))) uint8_t cover_pix[COVER_MAX_W * COV
 static EWRAM_BSS char cover_key[512];     // ROM path the current state belongs to
 static bool     cover_have;               // a valid cover is loaded (.bss/IWRAM -> zeroed)
 static uint16_t cover_ww;                 // width of the loaded cover
-static uint16_t cube_pal[CUBE_NCOLORS];   // the color cube, tuned per image (GBA BGR555)
+static uint16_t cube_pal[CUBE_NCOLORS];   // the palette, tuned per image (GBA BGR555)
 
 // Median-cut state. The histogram quantizes to 4 bits per channel (16x16x16 =
 // 4096 bins, 4KB) to keep the split pass fast; the palette colors themselves
@@ -167,217 +171,400 @@ static bool gcode_is_alnum(const uint8_t *c) {
   return true;
 }
 
-static void cover_cache_path(char *buf, size_t bufsz, const uint8_t gcode[4]) {
-  npf_snprintf(buf, bufsz, "%s/%c%c%c%c.img",
-               COVER_CACHE_DIR, gcode[0], gcode[1], gcode[2], gcode[3]);
+// ---------------------------------------------------------------------------
+// Async load state machine. coverart_update()/coverart_update_gcode() only
+// record the request; coverart_pump() (called once per rendered frame)
+// advances the load one SD operation or a small read chunk at a time, so the
+// menu never blocks on the card.
+
+#define CA_ROWS_PER_STEP  8          // rows read/written per pump step
+#define CA_RETRY_FRAMES   20         // pause before retrying a failed step
+
+typedef enum {
+  CA_IDLE = 0,
+  CA_ROM_OPEN,      // preload the ROM header to get the game code
+  CA_ROM_READ,
+  CA_CACHE_OPEN,    // fast path: the cached quantized cover
+  CA_CACHE_HDR,
+  CA_CACHE_STAT,
+  CA_CACHE_PIX,
+  CA_BMP_OPEN,      // slow path: quantize the BMP from scratch
+  CA_BMP_HDR,
+  CA_BMP_SEEK,
+  CA_BMP_PASS1,
+  CA_BMP_PASS2,
+  CA_WRITE_PIX,     // cache the result (best effort)
+  CA_DONE,
+  CA_RETRY_WAIT,    // transient SD errors: retry a few times
+} e_ca_state;
+
+static e_ca_state ca_state;
+static e_ca_state ca_entry;          // where the retry re-enters
+static bool  ca_fd_open;
+static FIL   ca_fd;
+static uint8_t ca_retries;
+static uint16_t ca_retry_frames;
+static uint16_t ca_row;              // the chunk cursor (rows)
+static unsigned ca_width, ca_height, ca_rowbytes;
+static bool ca_topdown;
+static uint32_t ca_dataoff;
+static char ca_fpath[512];           // the ROM path to preload
+static char ca_bmppath[64];
+static char ca_cachepath[64];
+static uint8_t ca_gcode[4];
+static EWRAM_BSS t_rom_header ca_romh;
+static EWRAM_BSS FILINFO ca_fno;
+static EWRAM_BSS __attribute__((aligned(4))) uint8_t ca_hdr[COVER_CACHE_HDRSZ];
+static EWRAM_BSS uint8_t ca_bmphdr[54];
+static EWRAM_BSS uint8_t ca_rowbuf[COVER_MAX_W * 2];
+
+static void ca_make_paths(void) {
+  npf_snprintf(ca_bmppath, sizeof(ca_bmppath), "%s/%c/%c/%c%c%c%c.bmp",
+               COVER_DIR, ca_gcode[0], ca_gcode[1],
+               ca_gcode[0], ca_gcode[1], ca_gcode[2], ca_gcode[3]);
+  npf_snprintf(ca_cachepath, sizeof(ca_cachepath), "%s/%c%c%c%c.img",
+               COVER_CACHE_DIR, ca_gcode[0], ca_gcode[1], ca_gcode[2], ca_gcode[3]);
 }
 
-// Fast path: read a previously quantized cover straight off the SD cache.
-// Validates the magic, the dimensions and the source BMP stat (so replacing
-// a cover invalidates the entry). On success the palette + pixels are in
-// place and cover_ww is set; the caller only needs to return.
-static bool load_cover_cache(const uint8_t gcode[4], const FILINFO *fno,
-                             unsigned width, unsigned height) {
-  char cpath[64];
-  cover_cache_path(cpath, sizeof(cpath), gcode);
+static void ca_abort(void) {
+  if (ca_fd_open) {
+    f_close(&ca_fd);
+    ca_fd_open = false;
+  }
+  ca_state = CA_IDLE;
+  ca_row = 0;
+  ca_retries = 0;
+}
 
-  FIL fd;
-  if (FR_OK != f_open(&fd, cpath, FA_READ))
-    return false;
+// A step failed: close the file and either retry (transient SD hiccups) or
+// give up so the cover stays hidden.
+static void ca_fail(void) {
+  if (ca_fd_open) {
+    f_close(&ca_fd);
+    ca_fd_open = false;
+  }
+  if (++ca_retries > 3) {
+    ca_state = CA_IDLE;
+    ca_row = 0;
+  } else {
+    ca_retry_frames = CA_RETRY_FRAMES;
+    ca_state = CA_RETRY_WAIT;
+  }
+}
 
-  uint8_t chdr[COVER_CACHE_HDRSZ];
-  UINT rb;
-  bool ok = (FR_OK == f_read(&fd, chdr, sizeof(chdr), &rb) && rb == sizeof(chdr) &&
-             chdr[0] == 'C' && chdr[1] == 'V' && chdr[2] == 'R' && chdr[3] == '1' &&
-             (unsigned)(chdr[4] | (chdr[5] << 8)) == width &&
-             (unsigned)(chdr[6] | (chdr[7] << 8)) == height &&
-             (chdr[8] | ((uint32_t)chdr[9] << 8) | ((uint32_t)chdr[10] << 16) | ((uint32_t)chdr[11] << 24)) == (uint32_t)fno->fsize &&
-             (unsigned)(chdr[12] | (chdr[13] << 8)) == fno->fdate &&
-             (unsigned)(chdr[14] | (chdr[15] << 8)) == fno->ftime);
+void coverart_pump(void) {
+  switch (ca_state) {
+  case CA_IDLE:
+    break;
 
-  if (ok) {
-    dma_memcpy16(cube_pal, chdr + 16, CUBE_NCOLORS);
-    uint8_t cbuf[COVER_MAX_W];
-    for (unsigned sy = 0; ok && sy < height; sy++) {
-      ok = (FR_OK == f_read(&fd, cbuf, width, &rb) && rb == width);
-      if (ok)
-        memcpy(&cover_pix[sy * COVER_MAX_W], cbuf, width);
+  case CA_ROM_OPEN:
+    if (FR_OK != f_open(&ca_fd, ca_fpath, FA_READ)) {
+      ca_fail();
+      break;
     }
+    ca_fd_open = true;
+    ca_state = CA_ROM_READ;
+    break;
+
+  case CA_ROM_READ: {
+    UINT rb;
+    bool ok = (FR_OK == f_read(&ca_fd, &ca_romh, sizeof(ca_romh), &rb) &&
+               rb == sizeof(ca_romh));
+    f_close(&ca_fd);
+    ca_fd_open = false;
+    if (!ok) {
+      ca_fail();
+      break;
+    }
+    if (!gcode_is_alnum(ca_romh.gcode)) {
+      ca_state = CA_IDLE;
+      ca_row = 0;
+      break;
+    }
+    memcpy(ca_gcode, ca_romh.gcode, 4);
+    ca_make_paths();
+    ca_state = CA_CACHE_OPEN;
+    break;
   }
 
-  f_close(&fd);
+  case CA_CACHE_OPEN:
+    if (FR_OK != f_open(&ca_fd, ca_cachepath, FA_READ)) {
+      // No cache: quantize the BMP from scratch.
+      ca_state = CA_BMP_OPEN;
+      break;
+    }
+    ca_fd_open = true;
+    ca_state = CA_CACHE_HDR;
+    break;
 
-  if (ok) {
-    cover_ww = (uint16_t)width;
+  case CA_CACHE_HDR: {
+    UINT rb;
+    bool ok = (FR_OK == f_read(&ca_fd, ca_hdr, sizeof(ca_hdr), &rb) &&
+               rb == sizeof(ca_hdr) &&
+               ca_hdr[0] == 'C' && ca_hdr[1] == 'V' && ca_hdr[2] == 'R' && ca_hdr[3] == '1');
+    if (!ok) {
+      f_close(&ca_fd);
+      ca_fd_open = false;
+      ca_state = CA_BMP_OPEN;
+      break;
+    }
+    ca_width  = ca_hdr[4] | (ca_hdr[5] << 8);
+    ca_height = ca_hdr[6] | (ca_hdr[7] << 8);
+    ca_state = CA_CACHE_STAT;
+    break;
+  }
+
+  case CA_CACHE_STAT:
+    if (FR_OK == f_stat(ca_bmppath, &ca_fno) &&
+        (ca_hdr[8] | ((uint32_t)ca_hdr[9] << 8) | ((uint32_t)ca_hdr[10] << 16) | ((uint32_t)ca_hdr[11] << 24)) == (uint32_t)ca_fno.fsize &&
+        (unsigned)(ca_hdr[12] | (ca_hdr[13] << 8)) == ca_fno.fdate &&
+        (unsigned)(ca_hdr[14] | (ca_hdr[15] << 8)) == ca_fno.ftime) {
+      dma_memcpy16(cube_pal, ca_hdr + 16, CUBE_NCOLORS);
+      memset(cover_pix, CUBE_PAL_BASE, sizeof(cover_pix));   // letterbox = black
+      ca_row = 0;
+      ca_state = CA_CACHE_PIX;
+    } else {
+      // Stale or corrupt cache: rebuild from the BMP.
+      f_close(&ca_fd);
+      ca_fd_open = false;
+      ca_state = CA_BMP_OPEN;
+    }
+    break;
+
+  case CA_CACHE_PIX: {
+    UINT rb;
+    unsigned rows = MIN(CA_ROWS_PER_STEP, ca_height - ca_row);
+    unsigned done = 0;
+    for (unsigned i = 0; i < rows; i++) {
+      if (FR_OK != f_read(&ca_fd, ca_rowbuf, ca_width, &rb) || rb != ca_width)
+        break;
+      memcpy(&cover_pix[(ca_row + i) * COVER_MAX_W], ca_rowbuf, ca_width);
+      done++;
+    }
+    f_close(&ca_fd);
+    ca_fd_open = false;
+    ca_row += done;
+    if (done < rows) {
+      ca_fail();
+      break;
+    }
+    if (ca_row >= ca_height)
+      ca_state = CA_DONE;
+    break;
+  }
+
+  case CA_BMP_OPEN:
+    if (FR_OK != f_open(&ca_fd, ca_bmppath, FA_READ)) {
+      ca_fail();
+      break;
+    }
+    ca_fd_open = true;
+    ca_state = CA_BMP_HDR;
+    break;
+
+  case CA_BMP_HDR: {
+    UINT rb;
+    bool ok = (FR_OK == f_read(&ca_fd, ca_bmphdr, sizeof(ca_bmphdr), &rb) &&
+               rb == sizeof(ca_bmphdr) &&
+               ca_bmphdr[0] == 'B' && ca_bmphdr[1] == 'M');
+    if (ok) {
+      ca_dataoff = ca_bmphdr[10] | (ca_bmphdr[11] << 8) |
+                   (ca_bmphdr[12] << 16) | ((uint32_t)ca_bmphdr[13] << 24);
+      int32_t w = ca_bmphdr[18] | (ca_bmphdr[19] << 8) | (ca_bmphdr[20] << 16) | (ca_bmphdr[21] << 24);
+      int32_t rh = ca_bmphdr[22] | (ca_bmphdr[23] << 8) | (ca_bmphdr[24] << 16) | (ca_bmphdr[25] << 24);
+      unsigned bpp = ca_bmphdr[28] | (ca_bmphdr[29] << 8);
+      ca_topdown = rh < 0;
+      int32_t h = ca_topdown ? -rh : rh;
+      ok = (bpp == 16 && w > 0 && w <= COVER_MAX_W && h > 0 && h <= COVER_H);
+      if (ok) {
+        ca_width = (unsigned)w;
+        ca_height = (unsigned)h;
+        ca_rowbytes = ((unsigned)w * 2 + 3) & ~3u;
+      }
+    }
+    f_close(&ca_fd);
+    ca_fd_open = false;
+    if (!ok) {
+      ca_fail();
+      break;
+    }
+    ca_state = CA_BMP_SEEK;
+    break;
+  }
+
+  case CA_BMP_SEEK:
+    if (FR_OK != f_open(&ca_fd, ca_bmppath, FA_READ) ||
+        FR_OK != f_lseek(&ca_fd, ca_dataoff)) {
+      ca_fail();
+      break;
+    }
+    f_stat(ca_bmppath, &ca_fno);   // for the cache header (best effort)
+    ca_fd_open = true;
+    memset(cover_qbuf, 0, sizeof(cover_qbuf));
+    ca_row = 0;
+    ca_state = CA_BMP_PASS1;
+    break;
+
+  case CA_BMP_PASS1: {
+    UINT rb;
+    unsigned rows = MIN(CA_ROWS_PER_STEP, ca_height - ca_row);
+    unsigned done = 0;
+    for (unsigned i = 0; i < rows; i++) {
+      if (FR_OK != f_read(&ca_fd, ca_rowbuf, ca_rowbytes, &rb) || rb != ca_rowbytes)
+        break;
+      for (unsigned x = 0; x < ca_width; x++) {
+        unsigned v = ca_rowbuf[x * 2] | (ca_rowbuf[x * 2 + 1] << 8);
+        uint8_t *h = qhist((v >> 11) & 0xF, (v >> 6) & 0xF, (v >> 1) & 0xF);
+        if (*h != 0xFF)
+          (*h)++;
+      }
+      done++;
+    }
+    ca_row += done;
+    if (done < rows) {
+      ca_fail();
+      break;
+    }
+    if (ca_row < ca_height)
+      break;
+    // Whole image histogrammed: run the cut (a rare, cache-miss-only CPU
+    // burst), then rewind for the remap pass.
+    cover_cut();
+    memset(cover_pix, CUBE_PAL_BASE, sizeof(cover_pix));
+    memset(cover_rsum, 0, sizeof(cover_rsum));
+    memset(cover_gsum, 0, sizeof(cover_gsum));
+    memset(cover_bsum, 0, sizeof(cover_bsum));
+    memset(cover_rcnt, 0, sizeof(cover_rcnt));
+    if (FR_OK != f_lseek(&ca_fd, ca_dataoff)) {
+      ca_fail();
+      break;
+    }
+    ca_row = 0;
+    ca_state = CA_BMP_PASS2;
+    break;
+  }
+
+  case CA_BMP_PASS2: {
+    UINT rb;
+    unsigned rows = MIN(CA_ROWS_PER_STEP, ca_height - ca_row);
+    unsigned done = 0;
+    for (unsigned i = 0; i < rows; i++) {
+      if (FR_OK != f_read(&ca_fd, ca_rowbuf, ca_rowbytes, &rb) || rb != ca_rowbytes)
+        break;
+      unsigned dy = ca_topdown ? (ca_row + i) : (ca_height - 1 - (ca_row + i));
+      uint8_t *dst = &cover_pix[dy * COVER_MAX_W];
+      for (unsigned x = 0; x < ca_width; x++) {
+        unsigned v = ca_rowbuf[x * 2] | (ca_rowbuf[x * 2 + 1] << 8);
+        unsigned r = (v >> 10) & 0x1F, g = (v >> 5) & 0x1F, b = v & 0x1F;
+        uint8_t box = cover_qbuf[qbin(r >> 1, g >> 1, b >> 1)];
+        dst[x] = CUBE_PAL_BASE + box;
+        if (box) {
+          box--;
+          cover_rsum[box] += r;
+          cover_gsum[box] += g;
+          cover_bsum[box] += b;
+          cover_rcnt[box]++;
+        }
+      }
+      done++;
+    }
+    ca_row += done;
+    if (done < rows) {
+      ca_fail();
+      break;
+    }
+    if (ca_row < ca_height)
+      break;
+    f_close(&ca_fd);
+    ca_fd_open = false;
+
+    // Build the final palette from the exact per-box means.
+    for (unsigned i = 0; i < cover_nboxes; i++) {
+      unsigned cnt = cover_rcnt[i];
+      if (cnt) {
+        unsigned mr = (cover_rsum[i] + cnt / 2) / cnt;
+        unsigned mg = (cover_gsum[i] + cnt / 2) / cnt;
+        unsigned mb = (cover_bsum[i] + cnt / 2) / cnt;
+        cube_pal[i + 1] = (mb << 10) | (mg << 5) | mr;
+      } else {
+        cube_pal[i + 1] = 0;
+      }
+    }
+    cube_pal[0] = 0;   // letterbox stays black
+
+    // Cache the result (best effort; the cover shows regardless).
+    f_mkdir(SUPERFW_DIR);
+    f_mkdir(COVER_CACHE_DIR);
+    f_chmod(COVER_CACHE_DIR, AM_HID, AM_HID);
+    ca_hdr[0] = 'C';
+    ca_hdr[1] = 'V';
+    ca_hdr[2] = 'R';
+    ca_hdr[3] = '1';
+    ca_hdr[4] = ca_width & 0xFF;
+    ca_hdr[5] = (ca_width >> 8) & 0xFF;
+    ca_hdr[6] = ca_height & 0xFF;
+    ca_hdr[7] = (ca_height >> 8) & 0xFF;
+    ca_hdr[8]  = ca_fno.fsize & 0xFF;
+    ca_hdr[9]  = (ca_fno.fsize >> 8) & 0xFF;
+    ca_hdr[10] = (ca_fno.fsize >> 16) & 0xFF;
+    ca_hdr[11] = (ca_fno.fsize >> 24) & 0xFF;
+    ca_hdr[12] = ca_fno.fdate & 0xFF;
+    ca_hdr[13] = (ca_fno.fdate >> 8) & 0xFF;
+    ca_hdr[14] = ca_fno.ftime & 0xFF;
+    ca_hdr[15] = (ca_fno.ftime >> 8) & 0xFF;
+    dma_memcpy16(ca_hdr + 16, cube_pal, CUBE_NCOLORS);
+    ca_row = 0;
+    if (FR_OK == f_open(&ca_fd, ca_cachepath, FA_WRITE | FA_CREATE_ALWAYS)) {
+      ca_fd_open = true;
+      UINT wb;
+      f_write(&ca_fd, ca_hdr, sizeof(ca_hdr), &wb);
+      ca_state = CA_WRITE_PIX;
+    } else {
+      ca_state = CA_DONE;
+    }
+    break;
+  }
+
+  case CA_WRITE_PIX: {
+    UINT wb;
+    unsigned rows = MIN(CA_ROWS_PER_STEP, ca_height - ca_row);
+    unsigned done = 0;
+    for (unsigned i = 0; i < rows; i++) {
+      if (FR_OK != f_write(&ca_fd, &cover_pix[(ca_row + i) * COVER_MAX_W], ca_width, &wb) ||
+          wb != ca_width)
+        break;
+      done++;
+    }
+    f_sync(&ca_fd);
+    f_close(&ca_fd);
+    ca_fd_open = false;
+    ca_row += done;
+    if (done < rows)
+      f_unlink(ca_cachepath);   // drop the partial file
+    ca_state = CA_DONE;
+    break;
+  }
+
+  case CA_DONE:
+    cover_ww = (uint16_t)ca_width;
     dma_memcpy16(&MEM_PALETTE[CUBE_PAL_BASE], cube_pal, CUBE_NCOLORS);
+    cover_have = true;
+    ca_state = CA_IDLE;
+    ca_row = 0;
+    break;
+
+  case CA_RETRY_WAIT:
+    if (--ca_retry_frames == 0)
+      ca_state = ca_entry;
+    break;
   }
-  return ok;
-}
-
-// Best-effort: store the quantized cover so the next load can skip the
-// histogram + median-cut + remap entirely.
-static void write_cover_cache(const uint8_t gcode[4], const FILINFO *fno,
-                              unsigned width, unsigned height) {
-  f_mkdir(SUPERFW_DIR);
-  f_mkdir(COVER_CACHE_DIR);
-  f_chmod(COVER_CACHE_DIR, AM_HID, AM_HID);   // keep the cache out of the browser
-
-  char cpath[64];
-  cover_cache_path(cpath, sizeof(cpath), gcode);
-
-  FIL fd;
-  if (FR_OK != f_open(&fd, cpath, FA_WRITE | FA_CREATE_ALWAYS))
-    return;
-
-  uint8_t chdr[COVER_CACHE_HDRSZ];
-  chdr[0] = 'C';
-  chdr[1] = 'V';
-  chdr[2] = 'R';
-  chdr[3] = '1';
-  chdr[4] = width & 0xFF;
-  chdr[5] = (width >> 8) & 0xFF;
-  chdr[6] = height & 0xFF;
-  chdr[7] = (height >> 8) & 0xFF;
-  chdr[8]  = fno->fsize & 0xFF;
-  chdr[9]  = (fno->fsize >> 8) & 0xFF;
-  chdr[10] = (fno->fsize >> 16) & 0xFF;
-  chdr[11] = (fno->fsize >> 24) & 0xFF;
-  chdr[12] = fno->fdate & 0xFF;
-  chdr[13] = (fno->fdate >> 8) & 0xFF;
-  chdr[14] = fno->ftime & 0xFF;
-  chdr[15] = (fno->ftime >> 8) & 0xFF;
-  dma_memcpy16(chdr + 16, cube_pal, CUBE_NCOLORS);
-
-  UINT wb;
-  bool ok = (FR_OK == f_write(&fd, chdr, sizeof(chdr), &wb) && wb == sizeof(chdr));
-  for (unsigned sy = 0; ok && sy < height; sy++)
-    ok = (FR_OK == f_write(&fd, &cover_pix[sy * COVER_MAX_W], width, &wb) && wb == width);
-
-  f_sync(&fd);
-  f_close(&fd);
-  if (!ok)
-    f_unlink(cpath);   // drop the partial file
-}
-
-static bool load_cover_file(const uint8_t gcode[4]) {
-  char path[64];
-  npf_snprintf(path, sizeof(path), "%s/%c/%c/%c%c%c%c.bmp",
-               COVER_DIR, gcode[0], gcode[1],
-               gcode[0], gcode[1], gcode[2], gcode[3]);
-
-  FIL fd;
-  if (FR_OK != f_open(&fd, path, FA_READ))
-    return false;
-
-  bool ok = false;
-  UINT rd;
-  uint8_t hdr[54];
-
-  if (FR_OK == f_read(&fd, hdr, sizeof(hdr), &rd) && rd == sizeof(hdr) &&
-      hdr[0] == 'B' && hdr[1] == 'M') {
-    uint32_t dataoff = hdr[10] | (hdr[11] << 8) | (hdr[12] << 16) | (hdr[13] << 24);
-    int32_t  width   = hdr[18] | (hdr[19] << 8) | (hdr[20] << 16) | (hdr[21] << 24);
-    int32_t  rawh    = hdr[22] | (hdr[23] << 8) | (hdr[24] << 16) | (hdr[25] << 24);
-    unsigned bpp     = hdr[28] | (hdr[29] << 8);
-    bool topdown = rawh < 0;
-    int32_t height = topdown ? -rawh : rawh;
-
-    if (bpp == 16 && width > 0 && width <= COVER_MAX_W &&
-        height > 0 && height <= COVER_H) {
-      // The cached quantized cover is the fast path: one SD read, no CPU
-      // analysis. Invalidated by the source BMP's size/date/time.
-      FILINFO fno;
-      f_stat(path, &fno);
-      if (load_cover_cache(gcode, &fno, (unsigned)width, (unsigned)height)) {
-        f_close(&fd);
-        return true;
-      }
-
-      if (FR_OK == f_lseek(&fd, dataoff)) {
-      unsigned rowbytes = ((unsigned)width * 2 + 3) & ~3u;   // 4-byte aligned rows
-      uint8_t rowbuf[COVER_MAX_W * 2];
-
-      // Pass 1: 4:4:4 histogram of the image.
-      memset(cover_qbuf, 0, sizeof(cover_qbuf));
-      ok = true;
-      for (int sy = 0; sy < height; sy++) {
-        if (FR_OK != f_read(&fd, rowbuf, rowbytes, &rd) || rd != rowbytes) {
-          ok = false;
-          break;
-        }
-        for (int x = 0; x < width; x++) {
-          unsigned v = rowbuf[x * 2] | (rowbuf[x * 2 + 1] << 8);
-          uint8_t *h = qhist((v >> 11) & 0xF, (v >> 6) & 0xF, (v >> 1) & 0xF);
-          if (*h != 0xFF)
-            (*h)++;
-        }
-      }
-
-      if (ok) {
-        cover_cut();
-
-        // Pass 2: remap the pixels through the boxes, accumulating full
-        // 5-bit sums so the palette means are exact.
-        // Pad letterbox (smaller images) with palette index 0 (= black).
-        memset(cover_pix, CUBE_PAL_BASE, sizeof(cover_pix));
-        memset(cover_rsum, 0, sizeof(cover_rsum));
-        memset(cover_gsum, 0, sizeof(cover_gsum));
-        memset(cover_bsum, 0, sizeof(cover_bsum));
-        memset(cover_rcnt, 0, sizeof(cover_rcnt));
-        if (FR_OK != f_lseek(&fd, dataoff))
-          ok = false;
-        for (int sy = 0; ok && sy < height; sy++) {
-          if (FR_OK != f_read(&fd, rowbuf, rowbytes, &rd) || rd != rowbytes) {
-            ok = false;
-            break;
-          }
-          unsigned dy = topdown ? (unsigned)sy : (unsigned)(height - 1 - sy);
-          uint8_t *dst = &cover_pix[dy * COVER_MAX_W];
-          for (int x = 0; x < width; x++) {
-            unsigned v = rowbuf[x * 2] | (rowbuf[x * 2 + 1] << 8);
-            unsigned r = (v >> 10) & 0x1F, g = (v >> 5) & 0x1F, b = v & 0x1F;
-            uint8_t box = cover_qbuf[qbin(r >> 1, g >> 1, b >> 1)];
-            dst[x] = CUBE_PAL_BASE + box;
-            if (box) {
-              box--;
-              cover_rsum[box] += r;
-              cover_gsum[box] += g;
-              cover_bsum[box] += b;
-              cover_rcnt[box]++;
-            }
-          }
-        }
-      }
-
-      if (ok) {
-        // Build the final palette from the exact per-box means.
-        for (unsigned i = 0; i < cover_nboxes; i++) {
-          unsigned cnt = cover_rcnt[i];
-          if (cnt) {
-            unsigned mr = (cover_rsum[i] + cnt / 2) / cnt;
-            unsigned mg = (cover_gsum[i] + cnt / 2) / cnt;
-            unsigned mb = (cover_bsum[i] + cnt / 2) / cnt;
-            cube_pal[i + 1] = (mb << 10) | (mg << 5) | mr;
-          } else {
-            cube_pal[i + 1] = 0;
-          }
-        }
-        cube_pal[0] = 0;   // letterbox stays black
-        cover_ww = (uint16_t)width;
-        dma_memcpy16(&MEM_PALETTE[CUBE_PAL_BASE], cube_pal, CUBE_NCOLORS);
-        write_cover_cache(gcode, &fno, (unsigned)width, (unsigned)height);   // best-effort
-      }
-      }
-    }
-  }
-
-  f_close(&fd);
-  return ok;
 }
 
 void coverart_invalidate(void) {
   cover_key[0] = 0;
   cover_have = false;
+  cover_ww = 0;
+  ca_abort();
 }
 
 void coverart_update(const char *rom_fullpath, uint32_t filesize, bool is_gba) {
@@ -388,16 +575,18 @@ void coverart_update(const char *rom_fullpath, uint32_t filesize, bool is_gba) {
   strncpy(cover_key, rom_fullpath, sizeof(cover_key) - 1);
   cover_key[sizeof(cover_key) - 1] = 0;
   cover_have = false;
+  cover_ww = 0;
 
-  if (!is_gba)
+  if (!is_gba) {
+    ca_abort();
     return;
+  }
 
-  t_rom_header romh;
-  if (0 != preload_gba_rom(rom_fullpath, filesize, &romh))
-    return;
-
-  if (gcode_is_alnum(romh.gcode))
-    cover_have = load_cover_file(romh.gcode);
+  ca_abort();
+  ca_entry = CA_ROM_OPEN;
+  strncpy(ca_fpath, rom_fullpath, sizeof(ca_fpath) - 1);
+  ca_fpath[sizeof(ca_fpath) - 1] = 0;
+  ca_state = CA_ROM_OPEN;
 }
 
 void coverart_update_gcode(const char *cachekey, const uint8_t gcode[4]) {
@@ -407,9 +596,15 @@ void coverart_update_gcode(const char *cachekey, const uint8_t gcode[4]) {
   strncpy(cover_key, cachekey, sizeof(cover_key) - 1);
   cover_key[sizeof(cover_key) - 1] = 0;
   cover_have = false;
+  cover_ww = 0;
 
-  if (gcode_is_alnum(gcode))
-    cover_have = load_cover_file(gcode);
+  ca_abort();
+  if (gcode_is_alnum(gcode)) {
+    memcpy(ca_gcode, gcode, 4);
+    ca_make_paths();
+    ca_entry = CA_CACHE_OPEN;
+    ca_state = CA_CACHE_OPEN;
+  }
 }
 
 bool coverart_available(void) {
