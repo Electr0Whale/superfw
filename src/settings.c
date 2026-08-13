@@ -123,10 +123,8 @@ bool save_ui_settings() {
     "langcode=%c%c\n"
     "recent_menu=%u\n"
     "anim_speed=%u\n"
-    "hide_hidden=%u\n"
-    "hide_ext=%u\n",
-    menu_theme, (lc & 0xFF), (lc >> 8), recent_menu, anim_speed, hide_hidden,
-    hide_extensions);
+    "hide_hidden=%u\n",
+    menu_theme, (lc & 0xFF), (lc >> 8), recent_menu, anim_speed, hide_hidden);
 
   UINT wrbytes;
   FRESULT res = f_write(&fd, buf, strlen(buf), &wrbytes);
@@ -159,6 +157,7 @@ bool save_settings() {
     "enable_slowld=%u\n"
     "enable_fastewram=%u\n"
     "enable_norwrcheck=%u\n"
+    "hide_ext=%u\n"
     "default_patcher=%u\n"
     "default_igmenu=%u\n"
     "default_rtcpatch=%u\n"
@@ -169,9 +168,9 @@ bool save_settings() {
     "default_rtcts=%lu\n",
     hotkey_combo, boot_bios_splash, save_path_default, save_path_nor_default,
     state_path_default, backup_sram_default, enable_cheats, use_slowld, use_fastew,
-    use_verify_nor, (unsigned int)patcher_default, ingamemenu_default, rtcpatch_default,
-    rtcspeed_default, autoload_default, autosave_default, autosave_prefer_ds,
-    rtcvalue_default);
+    use_verify_nor, hide_extensions, (unsigned int)patcher_default, ingamemenu_default,
+    rtcpatch_default, rtcspeed_default, autoload_default, autosave_default,
+    autosave_prefer_ds, rtcvalue_default);
 
   UINT wrbytes;
   FRESULT res = f_write(&fd, buf, strlen(buf), &wrbytes);
@@ -195,6 +194,7 @@ static void parse_settings(void *usr, const char *var, const char *value) {
       { "enable_slowld",     &use_slowld },
       { "enable_fastewram",  &use_fastew },
       { "enable_norwrcheck", &use_verify_nor },
+      { "hide_ext",          &hide_extensions },
       { "default_rtcpatch",  &rtcpatch_default },
       { "default_loadgame",  &autoload_default },
       { "default_savegame",  &autosave_default },
@@ -238,7 +238,6 @@ static void parse_ui_settings(void *usr, const char *var, const char *value) {
       { "theme",       &menu_theme },
       { "recent_menu", &recent_menu },
       { "hide_hidden", &hide_hidden },
-      { "hide_ext",    &hide_extensions },
       { "anim_speed",  &anim_speed },
     };
     unsigned valu = parseuint(value);

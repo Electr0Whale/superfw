@@ -202,7 +202,6 @@ static e_ca_state ca_state;
 static e_ca_state ca_entry;          // where the retry re-enters
 static bool  ca_fd_open;
 static FIL   ca_fd;
-static uint8_t ca_retries;
 static uint16_t ca_retry_frames;
 static uint16_t ca_row;              // the chunk cursor (rows)
 static unsigned ca_width, ca_height, ca_rowbytes;
@@ -233,23 +232,19 @@ static void ca_abort(void) {
   }
   ca_state = CA_IDLE;
   ca_row = 0;
-  ca_retries = 0;
 }
 
-// A step failed: close the file and either retry (transient SD hiccups) or
-// give up so the cover stays hidden.
+// A step failed: close the file and pause before retrying. The retry keeps
+// going indefinitely (real cards hiccup while waking up; the request abort
+// cancels it when the selection changes) so the cover eventually shows even
+// after a burst of transient SD errors.
 static void ca_fail(void) {
   if (ca_fd_open) {
     f_close(&ca_fd);
     ca_fd_open = false;
   }
-  if (++ca_retries > 3) {
-    ca_state = CA_IDLE;
-    ca_row = 0;
-  } else {
-    ca_retry_frames = CA_RETRY_FRAMES;
-    ca_state = CA_RETRY_WAIT;
-  }
+  ca_retry_frames = CA_RETRY_FRAMES;
+  ca_state = CA_RETRY_WAIT;
 }
 
 void coverart_pump(void) {
@@ -393,13 +388,16 @@ void coverart_pump(void) {
   }
 
   case CA_BMP_SEEK:
-    if (FR_OK != f_open(&ca_fd, ca_bmppath, FA_READ) ||
-        FR_OK != f_lseek(&ca_fd, ca_dataoff)) {
+    if (FR_OK != f_open(&ca_fd, ca_bmppath, FA_READ)) {
+      ca_fail();
+      break;
+    }
+    ca_fd_open = true;
+    if (FR_OK != f_lseek(&ca_fd, ca_dataoff)) {
       ca_fail();
       break;
     }
     f_stat(ca_bmppath, &ca_fno);   // for the cache header (best effort)
-    ca_fd_open = true;
     memset(cover_qbuf, 0, sizeof(cover_qbuf));
     ca_row = 0;
     ca_state = CA_BMP_PASS1;
