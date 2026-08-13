@@ -19,8 +19,9 @@
 #define COVER_MAX_W      136
 #define COVER_H          75
 
-// Fixed 6x6x6 color cube, placed in the free BG palette range 20..235
-// (theme=16..19, logo=1..15, IGM=240..244, selector=255 are left untouched).
+// Adaptive per-image palette (median-cut), placed in the free BG palette
+// range 20..235 (theme=16..19, logo=1..15, IGM=240..244, selector=255 are
+// left untouched).
 #define CUBE_PAL_BASE    20
 #define CUBE_NCOLORS     216
 

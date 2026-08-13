@@ -2,8 +2,9 @@
  * Cover-art / title-screen preview for the ROM browser.  See coverart.h.
  *
  * Reads "/IMGS/{c0}/{c1}/{CODE}.bmp" (up to 136x75, 16bpp X1R5G5B5) directly off
- * the SD card, maps each pixel to a fixed 6x6x6 palette cube (MEM_PALETTE[20..235])
- * and caches the resulting 8bpp image for fast per-frame blits.
+ * the SD card, quantizes it into a per-image adaptive palette (median-cut over
+ * a 4:4:4 histogram, refined to exact 5-bit means; MEM_PALETTE[20..235]) and
+ * caches the resulting 8bpp image for fast per-frame blits.
  */
 #include <string.h>
 #include <stdbool.h>
@@ -23,25 +24,126 @@ static EWRAM_BSS __attribute__((aligned(4))) uint8_t cover_pix[COVER_MAX_W * COV
 static EWRAM_BSS char cover_key[512];     // ROM path the current state belongs to
 static bool     cover_have;               // a valid cover is loaded (.bss/IWRAM -> zeroed)
 static uint16_t cover_ww;                 // width of the loaded cover
-static uint16_t cube_pal[CUBE_NCOLORS];   // the fixed color cube (GBA BGR555)
-static bool     cube_built;
+static uint16_t cube_pal[CUBE_NCOLORS];   // the color cube, tuned per image (GBA BGR555)
 
-// Build the 6x6x6 cube once. Each channel uses 6 evenly spread 5-bit levels.
-static void build_cube(void) {
-  static const uint8_t lvl[6] = { 0, 6, 12, 19, 25, 31 };
-  for (unsigned r = 0; r < 6; r++)
-    for (unsigned g = 0; g < 6; g++)
-      for (unsigned b = 0; b < 6; b++)
-        cube_pal[r * 36 + g * 6 + b] = (lvl[b] << 10) | (lvl[g] << 5) | lvl[r];
-  cube_built = true;
+// Median-cut state. The histogram quantizes to 4 bits per channel (16x16x16 =
+// 4096 bins, 4KB) to keep the split pass fast; the palette colors themselves
+// are computed at full 5-bit precision from the pixel sums below.
+#define COVER_QN          16
+#define COVER_QBUF_SZ     (COVER_QN * COVER_QN * COVER_QN)
+#define COVER_NBOXES      215        // palette slot 0 stays black (letterbox)
+
+static EWRAM_BSS uint8_t cover_qbuf[COVER_QBUF_SZ];    // hist, reused as the bin->box LUT
+static EWRAM_BSS uint32_t cover_rsum[COVER_NBOXES];    // per-box pixel sums (full 5-bit)
+static EWRAM_BSS uint32_t cover_gsum[COVER_NBOXES];
+static EWRAM_BSS uint32_t cover_bsum[COVER_NBOXES];
+static EWRAM_BSS uint16_t cover_rcnt[COVER_NBOXES];
+static EWRAM_BSS uint16_t cover_nboxes;
+
+typedef struct {
+  uint8_t r0, r1, g0, g1, b0, b1;   // inclusive 4-bit ranges
+  uint16_t count;
+} t_cover_box;
+static EWRAM_BSS t_cover_box cover_boxes[COVER_NBOXES];
+
+static inline unsigned qbin(unsigned r4, unsigned g4, unsigned b4) {
+  return (r4 << 8) | (g4 << 4) | b4;
 }
 
-// Map a BMP 16-bit pixel to its nearest cube index (already biased by base).
-// The packs are standard X1R5G5B5 BMPs: red is the HIGH 5 bits, blue the low
-// 5 bits (this was previously read GBA-native, which swapped red and blue).
-static inline uint8_t rgb555_to_cube(unsigned v) {
-  unsigned r = (v >> 10) & 0x1F, g = (v >> 5) & 0x1F, b = v & 0x1F;
-  return CUBE_PAL_BASE + (((r * 6) >> 5) * 36 + ((g * 6) >> 5) * 6 + ((b * 6) >> 5));
+static inline uint8_t *qhist(unsigned r4, unsigned g4, unsigned b4) {
+  return &cover_qbuf[qbin(r4, g4, b4)];
+}
+
+static uint16_t box_count(t_cover_box *b) {
+  unsigned c = 0;
+  for (unsigned r = b->r0; r <= b->r1; r++)
+    for (unsigned g = b->g0; g <= b->g1; g++)
+      for (unsigned bb = b->b0; bb <= b->b1; bb++)
+        c += *qhist(r, g, bb);
+  return c;
+}
+
+// Classic median-cut over the 4:4:4 histogram: repeatedly split the box with
+// the most pixels along its longest axis at the count median. The result is a
+// partition of the color cube whose boxes each hold ~equal pixel mass.
+static void cover_cut(void) {
+  cover_boxes[0] = (t_cover_box){ 0, COVER_QN - 1, 0, COVER_QN - 1, 0, COVER_QN - 1, 0 };
+  cover_boxes[0].count = box_count(&cover_boxes[0]);
+  cover_nboxes = 1;
+
+  while (cover_nboxes < COVER_NBOXES) {
+    // Pick the largest box that can still be split.
+    int best = -1;
+    unsigned bestlen = 0;
+    for (unsigned i = 0; i < cover_nboxes; i++) {
+      t_cover_box *b = &cover_boxes[i];
+      unsigned len = b->r1 - b->r0;
+      if (b->g1 - b->g0 > len) len = b->g1 - b->g0;
+      if (b->b1 - b->b0 > len) len = b->b1 - b->b0;
+      if (len && (best < 0 || b->count > cover_boxes[best].count)) {
+        best = (int)i;
+        bestlen = len;
+      }
+    }
+    if (best < 0 || !bestlen)
+      break;
+
+    t_cover_box *b = &cover_boxes[best];
+    unsigned ax = 0, a0 = b->r0, a1 = b->r1;
+    if (b->g1 - b->g0 > a1 - a0) { ax = 1; a0 = b->g0; a1 = b->g1; }
+    if (b->b1 - b->b0 > a1 - a0) { ax = 2; a0 = b->b0; a1 = b->b1; }
+
+    // Find the median value along the axis (first value where the cumulative
+    // count reaches half the box's mass).
+    unsigned half = (b->count + 1) / 2, acc = 0, splitv = a0;
+    for (unsigned v = a0; v < a1; v++) {
+      unsigned slice = 0;
+      if (ax == 0) {
+        for (unsigned g = b->g0; g <= b->g1; g++)
+          for (unsigned bb = b->b0; bb <= b->b1; bb++)
+            slice += *qhist(v, g, bb);
+      } else if (ax == 1) {
+        for (unsigned r = b->r0; r <= b->r1; r++)
+          for (unsigned bb = b->b0; bb <= b->b1; bb++)
+            slice += *qhist(r, v, bb);
+      } else {
+        for (unsigned r = b->r0; r <= b->r1; r++)
+          for (unsigned g = b->g0; g <= b->g1; g++)
+            slice += *qhist(r, g, v);
+      }
+      acc += slice;
+      if (acc >= half) {
+        splitv = v;
+        break;
+      }
+    }
+
+    // Shrink this box to the lower half and append the upper half.
+    t_cover_box hi = *b;
+    if (ax == 0) {
+      b->r1 = (uint8_t)splitv;
+      hi.r0 = (uint8_t)(splitv + 1);
+    } else if (ax == 1) {
+      b->g1 = (uint8_t)splitv;
+      hi.g0 = (uint8_t)(splitv + 1);
+    } else {
+      b->b1 = (uint8_t)splitv;
+      hi.b0 = (uint8_t)(splitv + 1);
+    }
+    b->count = box_count(b);
+    hi.count = box_count(&hi);
+    cover_boxes[cover_nboxes++] = hi;
+  }
+
+  // Turn the histogram buffer into a bin -> box LUT (1-based; 0 = black).
+  memset(cover_qbuf, 0, sizeof(cover_qbuf));
+  for (unsigned i = 0; i < cover_nboxes; i++) {
+    t_cover_box *b = &cover_boxes[i];
+    for (unsigned r = b->r0; r <= b->r1; r++)
+      for (unsigned g = b->g0; g <= b->g1; g++)
+        for (unsigned bb = b->b0; bb <= b->b1; bb++)
+          *qhist(r, g, bb) = (uint8_t)(i + 1);
+  }
 }
 
 static bool gcode_is_alnum(const uint8_t *c) {
@@ -80,27 +182,75 @@ static bool load_cover_file(const uint8_t gcode[4]) {
 
     if (bpp == 16 && width > 0 && width <= COVER_MAX_W &&
         height > 0 && height <= COVER_H && FR_OK == f_lseek(&fd, dataoff)) {
-      if (!cube_built)
-        build_cube();
-
-      // Pad letterbox (smaller images) with cube index 0 (= black).
-      memset(cover_pix, CUBE_PAL_BASE, sizeof(cover_pix));
-
       unsigned rowbytes = ((unsigned)width * 2 + 3) & ~3u;   // 4-byte aligned rows
       uint8_t rowbuf[COVER_MAX_W * 2];
+
+      // Pass 1: 4:4:4 histogram of the image.
+      memset(cover_qbuf, 0, sizeof(cover_qbuf));
       ok = true;
       for (int sy = 0; sy < height; sy++) {
         if (FR_OK != f_read(&fd, rowbuf, rowbytes, &rd) || rd != rowbytes) {
           ok = false;
           break;
         }
-        unsigned dy = topdown ? (unsigned)sy : (unsigned)(height - 1 - sy);
-        uint8_t *dst = &cover_pix[dy * COVER_MAX_W];
-        for (int x = 0; x < width; x++)
-          dst[x] = rgb555_to_cube(rowbuf[x * 2] | (rowbuf[x * 2 + 1] << 8));
+        for (int x = 0; x < width; x++) {
+          unsigned v = rowbuf[x * 2] | (rowbuf[x * 2 + 1] << 8);
+          uint8_t *h = qhist((v >> 11) & 0xF, (v >> 6) & 0xF, (v >> 1) & 0xF);
+          if (*h != 0xFF)
+            (*h)++;
+        }
       }
 
       if (ok) {
+        cover_cut();
+
+        // Pass 2: remap the pixels through the boxes, accumulating full
+        // 5-bit sums so the palette means are exact.
+        // Pad letterbox (smaller images) with palette index 0 (= black).
+        memset(cover_pix, CUBE_PAL_BASE, sizeof(cover_pix));
+        memset(cover_rsum, 0, sizeof(cover_rsum));
+        memset(cover_gsum, 0, sizeof(cover_gsum));
+        memset(cover_bsum, 0, sizeof(cover_bsum));
+        memset(cover_rcnt, 0, sizeof(cover_rcnt));
+        if (FR_OK != f_lseek(&fd, dataoff))
+          ok = false;
+        for (int sy = 0; ok && sy < height; sy++) {
+          if (FR_OK != f_read(&fd, rowbuf, rowbytes, &rd) || rd != rowbytes) {
+            ok = false;
+            break;
+          }
+          unsigned dy = topdown ? (unsigned)sy : (unsigned)(height - 1 - sy);
+          uint8_t *dst = &cover_pix[dy * COVER_MAX_W];
+          for (int x = 0; x < width; x++) {
+            unsigned v = rowbuf[x * 2] | (rowbuf[x * 2 + 1] << 8);
+            unsigned r = (v >> 10) & 0x1F, g = (v >> 5) & 0x1F, b = v & 0x1F;
+            uint8_t box = cover_qbuf[qbin(r >> 1, g >> 1, b >> 1)];
+            dst[x] = CUBE_PAL_BASE + box;
+            if (box) {
+              box--;
+              cover_rsum[box] += r;
+              cover_gsum[box] += g;
+              cover_bsum[box] += b;
+              cover_rcnt[box]++;
+            }
+          }
+        }
+      }
+
+      if (ok) {
+        // Build the final palette from the exact per-box means.
+        for (unsigned i = 0; i < cover_nboxes; i++) {
+          unsigned cnt = cover_rcnt[i];
+          if (cnt) {
+            unsigned mr = (cover_rsum[i] + cnt / 2) / cnt;
+            unsigned mg = (cover_gsum[i] + cnt / 2) / cnt;
+            unsigned mb = (cover_bsum[i] + cnt / 2) / cnt;
+            cube_pal[i + 1] = (mb << 10) | (mg << 5) | mr;
+          } else {
+            cube_pal[i + 1] = 0;
+          }
+        }
+        cube_pal[0] = 0;   // letterbox stays black
         cover_ww = (uint16_t)width;
         dma_memcpy16(&MEM_PALETTE[CUBE_PAL_BASE], cube_pal, CUBE_NCOLORS);
       }
