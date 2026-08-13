@@ -1324,6 +1324,7 @@ static void draw_central_text_wrapped(const char *t, volatile uint8_t *frame, un
 void render_recent(volatile uint8_t *frame) {
   // Load the cover for the highlighted ROM (cheap unless the selection moved).
   bool cover_on = false;
+  unsigned pane_x = COVER_PANE_X;
   if (!smenu.recent.maxentries)
     coverart_invalidate();
   else {
@@ -1333,6 +1334,9 @@ void render_recent(volatile uint8_t *frame) {
     bool is_gba = (sl >= 4 && !strcasecmp(&selfn[sl - 4], ".gba"));
     coverart_update(sel->fpath, 0, is_gba);
     cover_on = coverart_available();
+    if (cover_on) {
+      pane_x = COVER_PANE_X + COVER_MAX_W - coverart_width();
+    }
   }
 
   // Render the list from memory.
@@ -1346,7 +1350,7 @@ void render_recent(volatile uint8_t *frame) {
 
     // Keep rows overlapping the cover pane clear of it.
     unsigned rowy = (1 + i) * 16;
-    unsigned rmax = (cover_on && rowy + 15 >= COVER_PANE_Y) ? (COVER_PANE_X - 3) : SCREEN_WIDTH;
+    unsigned rmax = (cover_on && rowy + 15 >= COVER_PANE_Y) ? (pane_x - 3) : SCREEN_WIDTH;
 
     // Animate the row entries if they are too long!
     if (i == smenu.recent.selector - smenu.recent.seloff)
@@ -1356,13 +1360,13 @@ void render_recent(volatile uint8_t *frame) {
   }
 
   unsigned selrowy = (smenu.recent.selector - smenu.recent.seloff + 1) * 16;
-  unsigned hlright = (cover_on && selrowy + 15 >= COVER_PANE_Y) ? COVER_PANE_X : 240;
+  unsigned hlright = (cover_on && selrowy + 15 >= COVER_PANE_Y) ? pane_x : 240;
   for (unsigned i = 0; i + 16 <= hlright; i += 16)
     render_icon_trans(i, selrowy, 63);
 
   if (cover_on) {
     coverart_draw(frame);
-    draw_box_outline(frame, COVER_PANE_X - 1, COVER_PANE_X + COVER_W + 1,
+    draw_box_outline(frame, pane_x - 1, pane_x + coverart_width() + 1,
                      COVER_PANE_Y - 1, COVER_PANE_Y + COVER_H + 1, FG_COLOR);
   }
 }
@@ -1373,6 +1377,7 @@ void render_flashbrowser(volatile uint8_t *frame) {
   dma_memset16(&frame[240*144], dup8(FG_COLOR), 240*16/2);
 
   bool cover_on = false;
+  unsigned pane_x = COVER_PANE_X;
 
   // Render the list from memory.
   if (!smenu.fbrowser.maxentries) {
@@ -1384,6 +1389,9 @@ void render_flashbrowser(volatile uint8_t *frame) {
     t_flash_game_entry *sel = &sdr_state->nordata.games[smenu.fbrowser.selector];
     coverart_update_gcode(&sel->game_name[sel->bnoffset], (const uint8_t*)&sel->gamecode);
     cover_on = coverart_available();
+    if (cover_on) {
+      pane_x = COVER_PANE_X + COVER_MAX_W - coverart_width();
+    }
 
     for (unsigned i = 0; i < NORGAMES_ROWS; i++) {
       if (smenu.fbrowser.seloff + i >= smenu.fbrowser.maxentries)
@@ -1393,7 +1401,7 @@ void render_flashbrowser(volatile uint8_t *frame) {
       render_icon(2, (i+1)*16, ICON_GBACART);
 
       unsigned rowy = (1 + i) * 16;
-      unsigned rmax = (cover_on && rowy + 15 >= COVER_PANE_Y) ? (COVER_PANE_X - 3) : SCREEN_WIDTH;
+      unsigned rmax = (cover_on && rowy + 15 >= COVER_PANE_Y) ? (pane_x - 3) : SCREEN_WIDTH;
 
       char szstr[16];
       human_size(szstr, sizeof(szstr), e->numblks * NOR_BLOCK_SIZE);
@@ -1409,14 +1417,14 @@ void render_flashbrowser(volatile uint8_t *frame) {
     }
 
     unsigned selrowy = (smenu.fbrowser.selector - smenu.fbrowser.seloff + 1) * 16;
-    unsigned hlright = (cover_on && selrowy + 15 >= COVER_PANE_Y) ? COVER_PANE_X : 240;
+    unsigned hlright = (cover_on && selrowy + 15 >= COVER_PANE_Y) ? pane_x : 240;
     for (unsigned i = 0; i + 16 <= hlright; i += 16)
       render_icon_trans(i, selrowy, 63);
   }
 
   if (cover_on) {
     coverart_draw(frame);
-    draw_box_outline(frame, COVER_PANE_X - 1, COVER_PANE_X + COVER_W + 1,
+    draw_box_outline(frame, pane_x - 1, pane_x + coverart_width() + 1,
                      COVER_PANE_Y - 1, COVER_PANE_Y + COVER_H + 1, FG_COLOR);
   }
 
@@ -1436,6 +1444,7 @@ void render_browser(volatile uint8_t *frame) {
   dma_memset16(&frame[240*144], dup8(FG_COLOR), 240*16/2);
 
   bool cover_on = false;
+  unsigned pane_x = COVER_PANE_X;
 
   if (!smenu.browser.dispentries) {
     coverart_invalidate();
@@ -1454,6 +1463,9 @@ void render_browser(volatile uint8_t *frame) {
       coverart_update(fpath, sel->filesize, is_gba);
     }
     cover_on = coverart_available();
+    if (cover_on) {
+      pane_x = COVER_PANE_X + COVER_MAX_W - coverart_width();
+    }
 
     for (unsigned i = 0; i < BROWSER_ROWS; i++) {
       if (smenu.browser.seloff + i >= smenu.browser.dispentries)
@@ -1474,7 +1486,7 @@ void render_browser(volatile uint8_t *frame) {
 
       // Keep rows overlapping the cover pane clear of it.
       unsigned rowy = (1 + i) * 16;
-      unsigned rmax = (cover_on && rowy + 15 >= COVER_PANE_Y) ? (COVER_PANE_X - 3) : SCREEN_WIDTH;
+      unsigned rmax = (cover_on && rowy + 15 >= COVER_PANE_Y) ? (pane_x - 3) : SCREEN_WIDTH;
       draw_rightj_text(szstr, frame, rmax - 2, rowy);
 
       // Animate the row entries if they are too long!
@@ -1486,14 +1498,14 @@ void render_browser(volatile uint8_t *frame) {
     }
 
     unsigned selrowy = (smenu.browser.selector - smenu.browser.seloff + 1) * 16;
-    unsigned hlright = (cover_on && selrowy + 15 >= COVER_PANE_Y) ? COVER_PANE_X : 240;
+    unsigned hlright = (cover_on && selrowy + 15 >= COVER_PANE_Y) ? pane_x : 240;
     for (unsigned i = 0; i + 16 <= hlright; i += 16)
       render_icon_trans(i, selrowy, 63);
   }
 
   if (cover_on) {
     coverart_draw(frame);
-    draw_box_outline(frame, COVER_PANE_X - 1, COVER_PANE_X + COVER_W + 1,
+    draw_box_outline(frame, pane_x - 1, pane_x + coverart_width() + 1,
                      COVER_PANE_Y - 1, COVER_PANE_Y + COVER_H + 1, FG_COLOR);
   }
 

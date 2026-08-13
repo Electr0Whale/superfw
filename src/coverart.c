@@ -1,9 +1,9 @@
 /*
  * Cover-art / title-screen preview for the ROM browser.  See coverart.h.
  *
- * Reads "/IMGS/{c0}/{c1}/{CODE}.bmp" (120x75, 16bpp X1R5G5B5) directly off the SD
- * card, maps each pixel to a fixed 6x6x6 palette cube (MEM_PALETTE[20..235]) and
- * caches the resulting 8bpp image for fast per-frame blits.
+ * Reads "/IMGS/{c0}/{c1}/{CODE}.bmp" (up to 136x75, 16bpp X1R5G5B5) directly off
+ * the SD card, maps each pixel to a fixed 6x6x6 palette cube (MEM_PALETTE[20..235])
+ * and caches the resulting 8bpp image for fast per-frame blits.
  */
 #include <string.h>
 #include <stdbool.h>
@@ -19,9 +19,10 @@
 // Big buffers go in EWRAM (.sbss); the default .bss lives in scarce IWRAM.
 #define EWRAM_BSS  __attribute__((section(".sbss")))
 
-static EWRAM_BSS __attribute__((aligned(4))) uint8_t cover_pix[COVER_W * COVER_H];
+static EWRAM_BSS __attribute__((aligned(4))) uint8_t cover_pix[COVER_MAX_W * COVER_H];
 static EWRAM_BSS char cover_key[512];     // ROM path the current state belongs to
 static bool     cover_have;               // a valid cover is loaded (.bss/IWRAM -> zeroed)
+static uint16_t cover_ww;                 // width of the loaded cover
 static uint16_t cube_pal[CUBE_NCOLORS];   // the fixed color cube (GBA BGR555)
 static bool     cube_built;
 
@@ -77,7 +78,7 @@ static bool load_cover_file(const uint8_t gcode[4]) {
     bool topdown = rawh < 0;
     int32_t height = topdown ? -rawh : rawh;
 
-    if (bpp == 16 && width > 0 && width <= COVER_W &&
+    if (bpp == 16 && width > 0 && width <= COVER_MAX_W &&
         height > 0 && height <= COVER_H && FR_OK == f_lseek(&fd, dataoff)) {
       if (!cube_built)
         build_cube();
@@ -86,7 +87,7 @@ static bool load_cover_file(const uint8_t gcode[4]) {
       memset(cover_pix, CUBE_PAL_BASE, sizeof(cover_pix));
 
       unsigned rowbytes = ((unsigned)width * 2 + 3) & ~3u;   // 4-byte aligned rows
-      uint8_t rowbuf[COVER_W * 2];
+      uint8_t rowbuf[COVER_MAX_W * 2];
       ok = true;
       for (int sy = 0; sy < height; sy++) {
         if (FR_OK != f_read(&fd, rowbuf, rowbytes, &rd) || rd != rowbytes) {
@@ -94,13 +95,15 @@ static bool load_cover_file(const uint8_t gcode[4]) {
           break;
         }
         unsigned dy = topdown ? (unsigned)sy : (unsigned)(height - 1 - sy);
-        uint8_t *dst = &cover_pix[dy * COVER_W];
+        uint8_t *dst = &cover_pix[dy * COVER_MAX_W];
         for (int x = 0; x < width; x++)
           dst[x] = rgb555_to_cube(rowbuf[x * 2] | (rowbuf[x * 2 + 1] << 8));
       }
 
-      if (ok)
+      if (ok) {
+        cover_ww = (uint16_t)width;
         dma_memcpy16(&MEM_PALETTE[CUBE_PAL_BASE], cube_pal, CUBE_NCOLORS);
+      }
     }
   }
 
@@ -149,13 +152,18 @@ bool coverart_available(void) {
   return cover_have;
 }
 
+uint16_t coverart_width(void) {
+  return cover_have ? cover_ww : 0;
+}
+
 void coverart_draw(volatile uint8_t *frame) {
   if (!cover_have)
     return;
   // Re-assert our palette every frame: the logo (info tab) shares the
   // MEM_PALETTE[20..235] range and may have overwritten the cube.
   dma_memcpy16(&MEM_PALETTE[CUBE_PAL_BASE], cube_pal, CUBE_NCOLORS);
+  unsigned pane_x = COVER_PANE_X + (COVER_MAX_W - cover_ww);   // right-aligned
   for (unsigned r = 0; r < COVER_H; r++)
-    dma_memcpy16(&frame[(COVER_PANE_Y + r) * 240 + COVER_PANE_X],
-                 &cover_pix[r * COVER_W], COVER_W / 2);
+    dma_memcpy16(&frame[(COVER_PANE_Y + r) * 240 + pane_x],
+                 &cover_pix[r * COVER_MAX_W], (cover_ww + 1) / 2);
 }

@@ -13,8 +13,10 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-// Native thumbnail size (matches the EZ-Omega .bmp pack).
-#define COVER_W          120
+// Native thumbnail size (matches the EZ-Omega .bmp pack): the height is fixed
+// at 75, but the width varies by region (US/JP covers differ). The pane is
+// right-aligned to the actual image width, so mixed packs all fit.
+#define COVER_MAX_W      136
 #define COVER_H          75
 
 // Fixed 6x6x6 color cube, placed in the free BG palette range 20..235
@@ -22,9 +24,10 @@
 #define CUBE_PAL_BASE    20
 #define CUBE_NCOLORS     216
 
-// Bottom-right pane, just above the y=144 footer bar.
-#define COVER_PANE_X     (240 - COVER_W - 2)    // 118
-#define COVER_PANE_Y     (144 - COVER_H - 2)    // 67
+// Bottom-right pane, just above the y=144 footer bar. COVER_PANE_X is the left
+// edge at maximum width; narrower covers shift it right (see coverart_width()).
+#define COVER_PANE_X     (240 - COVER_MAX_W - 2)    // 102
+#define COVER_PANE_Y     (144 - COVER_H - 2)        // 67
 
 // Forget the cached cover (call when the directory listing is rebuilt or the
 // feature is toggled off).
@@ -42,6 +45,10 @@ void coverart_update_gcode(const char *cachekey, const uint8_t gcode[4]);
 
 // Whether a cover is currently loaded and should be drawn.
 bool coverart_available(void);
+
+// Width of the loaded cover in pixels (0 when none is loaded). The pane is
+// right-aligned: its left edge is COVER_PANE_X + COVER_MAX_W - width.
+uint16_t coverart_width(void);
 
 // Blit the loaded cover into the bottom-right pane of `frame`.
 void coverart_draw(volatile uint8_t *frame);
