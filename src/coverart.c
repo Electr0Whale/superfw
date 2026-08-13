@@ -220,6 +220,7 @@ static void write_cover_cache(const uint8_t gcode[4], const FILINFO *fno,
                               unsigned width, unsigned height) {
   f_mkdir(SUPERFW_DIR);
   f_mkdir(COVER_CACHE_DIR);
+  f_chmod(COVER_CACHE_DIR, AM_HID, AM_HID);   // keep the cache out of the browser
 
   char cpath[64];
   cover_cache_path(cpath, sizeof(cpath), gcode);
