@@ -17,6 +17,15 @@
 
 #define COVER_DIR  "/IMGS"
 
+// Quantized-cover cache: the first load of a cover runs the histogram +
+// median-cut + remap (~60ms) and stores the result so later loads only read
+// the cached pixels + palette off the SD card.
+// Layout (little-endian): magic "CVR1", u16 width, u16 height, u32 src_size,
+// u16 src_date, u16 src_time (source BMP stat, for invalidation), then the
+// 216-color palette and the 8bpp pixels row by row.
+#define COVER_CACHE_DIR   "/.superfw/imgcache"
+#define COVER_CACHE_HDRSZ (4 + 2 + 2 + 4 + 2 + 2 + CUBE_NCOLORS * 2)
+
 // Big buffers go in EWRAM (.sbss); the default .bss lives in scarce IWRAM.
 #define EWRAM_BSS  __attribute__((section(".sbss")))
 
@@ -130,8 +139,9 @@ static void cover_cut(void) {
       b->b1 = (uint8_t)splitv;
       hi.b0 = (uint8_t)(splitv + 1);
     }
+    uint16_t oldcount = b->count;
     b->count = box_count(b);
-    hi.count = box_count(&hi);
+    hi.count = oldcount - b->count;
     cover_boxes[cover_nboxes++] = hi;
   }
 
@@ -155,6 +165,97 @@ static bool gcode_is_alnum(const uint8_t *c) {
       return false;
   }
   return true;
+}
+
+static void cover_cache_path(char *buf, size_t bufsz, const uint8_t gcode[4]) {
+  npf_snprintf(buf, bufsz, "%s/%c%c%c%c.img",
+               COVER_CACHE_DIR, gcode[0], gcode[1], gcode[2], gcode[3]);
+}
+
+// Fast path: read a previously quantized cover straight off the SD cache.
+// Validates the magic, the dimensions and the source BMP stat (so replacing
+// a cover invalidates the entry). On success the palette + pixels are in
+// place and cover_ww is set; the caller only needs to return.
+static bool load_cover_cache(const uint8_t gcode[4], const FILINFO *fno,
+                             unsigned width, unsigned height) {
+  char cpath[64];
+  cover_cache_path(cpath, sizeof(cpath), gcode);
+
+  FIL fd;
+  if (FR_OK != f_open(&fd, cpath, FA_READ))
+    return false;
+
+  uint8_t chdr[COVER_CACHE_HDRSZ];
+  UINT rb;
+  bool ok = (FR_OK == f_read(&fd, chdr, sizeof(chdr), &rb) && rb == sizeof(chdr) &&
+             chdr[0] == 'C' && chdr[1] == 'V' && chdr[2] == 'R' && chdr[3] == '1' &&
+             (unsigned)(chdr[4] | (chdr[5] << 8)) == width &&
+             (unsigned)(chdr[6] | (chdr[7] << 8)) == height &&
+             (chdr[8] | ((uint32_t)chdr[9] << 8) | ((uint32_t)chdr[10] << 16) | ((uint32_t)chdr[11] << 24)) == (uint32_t)fno->fsize &&
+             (unsigned)(chdr[12] | (chdr[13] << 8)) == fno->fdate &&
+             (unsigned)(chdr[14] | (chdr[15] << 8)) == fno->ftime);
+
+  if (ok) {
+    dma_memcpy16(cube_pal, chdr + 16, CUBE_NCOLORS);
+    uint8_t cbuf[COVER_MAX_W];
+    for (unsigned sy = 0; ok && sy < height; sy++) {
+      ok = (FR_OK == f_read(&fd, cbuf, width, &rb) && rb == width);
+      if (ok)
+        memcpy(&cover_pix[sy * COVER_MAX_W], cbuf, width);
+    }
+  }
+
+  f_close(&fd);
+
+  if (ok) {
+    cover_ww = (uint16_t)width;
+    dma_memcpy16(&MEM_PALETTE[CUBE_PAL_BASE], cube_pal, CUBE_NCOLORS);
+  }
+  return ok;
+}
+
+// Best-effort: store the quantized cover so the next load can skip the
+// histogram + median-cut + remap entirely.
+static void write_cover_cache(const uint8_t gcode[4], const FILINFO *fno,
+                              unsigned width, unsigned height) {
+  f_mkdir(SUPERFW_DIR);
+  f_mkdir(COVER_CACHE_DIR);
+
+  char cpath[64];
+  cover_cache_path(cpath, sizeof(cpath), gcode);
+
+  FIL fd;
+  if (FR_OK != f_open(&fd, cpath, FA_WRITE | FA_CREATE_ALWAYS))
+    return;
+
+  uint8_t chdr[COVER_CACHE_HDRSZ];
+  chdr[0] = 'C';
+  chdr[1] = 'V';
+  chdr[2] = 'R';
+  chdr[3] = '1';
+  chdr[4] = width & 0xFF;
+  chdr[5] = (width >> 8) & 0xFF;
+  chdr[6] = height & 0xFF;
+  chdr[7] = (height >> 8) & 0xFF;
+  chdr[8]  = fno->fsize & 0xFF;
+  chdr[9]  = (fno->fsize >> 8) & 0xFF;
+  chdr[10] = (fno->fsize >> 16) & 0xFF;
+  chdr[11] = (fno->fsize >> 24) & 0xFF;
+  chdr[12] = fno->fdate & 0xFF;
+  chdr[13] = (fno->fdate >> 8) & 0xFF;
+  chdr[14] = fno->ftime & 0xFF;
+  chdr[15] = (fno->ftime >> 8) & 0xFF;
+  dma_memcpy16(chdr + 16, cube_pal, CUBE_NCOLORS);
+
+  UINT wb;
+  bool ok = (FR_OK == f_write(&fd, chdr, sizeof(chdr), &wb) && wb == sizeof(chdr));
+  for (unsigned sy = 0; ok && sy < height; sy++)
+    ok = (FR_OK == f_write(&fd, &cover_pix[sy * COVER_MAX_W], width, &wb) && wb == width);
+
+  f_sync(&fd);
+  f_close(&fd);
+  if (!ok)
+    f_unlink(cpath);   // drop the partial file
 }
 
 static bool load_cover_file(const uint8_t gcode[4]) {
@@ -181,7 +282,17 @@ static bool load_cover_file(const uint8_t gcode[4]) {
     int32_t height = topdown ? -rawh : rawh;
 
     if (bpp == 16 && width > 0 && width <= COVER_MAX_W &&
-        height > 0 && height <= COVER_H && FR_OK == f_lseek(&fd, dataoff)) {
+        height > 0 && height <= COVER_H) {
+      // The cached quantized cover is the fast path: one SD read, no CPU
+      // analysis. Invalidated by the source BMP's size/date/time.
+      FILINFO fno;
+      f_stat(path, &fno);
+      if (load_cover_cache(gcode, &fno, (unsigned)width, (unsigned)height)) {
+        f_close(&fd);
+        return true;
+      }
+
+      if (FR_OK == f_lseek(&fd, dataoff)) {
       unsigned rowbytes = ((unsigned)width * 2 + 3) & ~3u;   // 4-byte aligned rows
       uint8_t rowbuf[COVER_MAX_W * 2];
 
@@ -253,6 +364,8 @@ static bool load_cover_file(const uint8_t gcode[4]) {
         cube_pal[0] = 0;   // letterbox stays black
         cover_ww = (uint16_t)width;
         dma_memcpy16(&MEM_PALETTE[CUBE_PAL_BASE], cube_pal, CUBE_NCOLORS);
+        write_cover_cache(gcode, &fno, (unsigned)width, (unsigned)height);   // best-effort
+      }
       }
     }
   }
