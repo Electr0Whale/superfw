@@ -22,11 +22,24 @@ args = parser.parse_args()
 
 HOTKEY = 0x00F7    # L+R+START
 
+# t_igmenu field offsets (see src/ingame.h / src/ingame.S).
+# startup_insts[8]=0, tramp1=32, tramp2=48, menu_rsize=64,
+# drv_issdhc=68, drv_rca=72, menu_hotkey=76, menu_lang=80,
+# menu_use_directsave=84, menu_font_base=88, menu_cheats_base=92,
+# scratch_space_base=96, scratch_space_size=100, has_rtc=104,
+# menu_anim_speed=108, menu_palette[8]=112, savefile_backups=128.
+OFF_HOTKEY   = 76
+OFF_LANG     = 80
+OFF_USEDS    = 84
+OFF_FONTBASE = 88
+OFF_CHEATS   = 92
+OFF_PALETTE  = 112
+
 def RGB2GBA(c):
   return ((c & 0xF80000) >> 19) | ((c & 0x00F800) >>  6) | ((c & 0x0000F8) <<  7)
 
 rom = open(args.rom, "rb").read()
-pload = open(args.payload, "rb").read()
+pload = bytearray(open(args.payload, "rb").read())
 fpack = open(args.fontpack, "rb").read()
 
 # Pad font pack (should be multiple of 4 already ...)
@@ -37,6 +50,12 @@ while len(fpack) % 4:
 assert rom[0x3] == 0xEA  # It's always an unconditional branch!
 start_addr = (struct.unpack("<I", rom[0:4])[0] & 0xFFFFFF) * 4 + 8 + 0x08000000
 
+# The payload stub jumps to the ROM header entry-point field, so fill it
+# with the game's real entry point.
+rom = bytearray(rom)
+rom[0xB8:0xBC] = struct.pack("<I", start_addr)
+rom = bytes(rom)
+
 # Replace inst with a branch to the payload
 pload_entry = len(rom) + len(fpack)
 start_inst = struct.pack("<I", 0xEA000000 | ((pload_entry >> 2) - 2))
@@ -44,24 +63,26 @@ start_inst = struct.pack("<I", 0xEA000000 | ((pload_entry >> 2) - 2))
 # We place the menu right after the ROM, font pack first.
 fpack_addr = 0x08000000 + len(rom)
 
-# Proceed to patch the payload by patching its header.
-hdr = struct.pack("<IIIIIIHHHH",
-  start_addr,                  # entry point
-  0,                           # pload size (ignore)
-  HOTKEY,                      # hotkey combo
-  0,                           # lang
-  fpack_addr,                  # Font pack address
-  0,                           # Cheat base addr
-  RGB2GBA(0xeca551),           # menu palette
-  RGB2GBA(0xbda27b),
-  RGB2GBA(0x000000),
-  0)
+# Patch the payload header fields at their current t_igmenu offsets.
+def w32(off, v):
+  pload[off:off+4] = struct.pack("<I", v)
+
+def w16(off, v):
+  pload[off:off+2] = struct.pack("<H", v)
+
+w32(OFF_HOTKEY, HOTKEY)       # hotkey combo
+w32(OFF_LANG, 0)              # lang: English
+w32(OFF_USEDS, 0)             # no DirectSave
+w32(OFF_FONTBASE, fpack_addr) # font pack address
+w32(OFF_CHEATS, 0)            # cheat base addr
+w16(OFF_PALETTE + 0, RGB2GBA(0xeca551))  # menu palette
+w16(OFF_PALETTE + 2, RGB2GBA(0xbda27b))
+w16(OFF_PALETTE + 4, RGB2GBA(0x000000))
 
 # Pack it all!
-outrom = start_inst + rom[4:] + fpack + pload[:15*4] + hdr + pload[15*4 + len(hdr):]
+outrom = start_inst + rom[4:] + fpack + bytes(pload)
 
 # Padd it to power of two?
 # TODO
 
 open(args.out, "wb").write(outrom)
-
