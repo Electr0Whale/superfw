@@ -5,6 +5,7 @@ VERSION_SLUG_WORD := $(shell git rev-parse --short=8 HEAD || echo FFFFFFFF)
 PREFIX		:= arm-none-eabi-
 CC		:= $(PREFIX)gcc
 CXX		:= $(PREFIX)g++
+CPP		:= $(PREFIX)cpp
 OBJDUMP		:= $(PREFIX)objdump
 OBJCOPY		:= $(PREFIX)objcopy
 
@@ -234,7 +235,7 @@ firmware.ewram.gba.comp:	firmware.ewram.gba ./upkr.elf
 	./apultra.elf $< $@
 
 %.ld.i:	%.ld
-	cpp $< -o $@
+	$(CPP) $< -o $@
 
 apultra.elf:	tools/apultra.cc
 	g++ -std=c++20 -O3 $< -o $@
