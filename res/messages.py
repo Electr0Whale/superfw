@@ -64,6 +64,7 @@ en_strings = [
   "MSG_SETT_CHTEN":  "Enable cheats",
   "MSG_SETT_FASTSD": "Fast ROM loading",
   "MSG_SETT_FASTEW": "EWRAM overclock",
+  "MSG_SETT_HIDEEXT": "Hide file extensions",
 
   "MSG_TOOLS0_SDRAM": "SDRAM memory test",
   "MSG_TOOLS1_SRAM":  "SRAM memory test",
@@ -117,6 +118,7 @@ en_strings = [
   "MSG_BACKUP_I":      "Keep the last N save files",
   "MSG_FASTSD_I":      "Use a fast ROM loading mechanism. Can result in crashes or incorrect reads in some devices",
   "MSG_FASTEW_I":      "Overclock EWRAM for some extra performance. Not available on NDS or GBA Micro",
+  "MSG_SETT_HIDEEXT_I": "Hides the .gba suffix in the ROM, recent and flash game lists",
   "MSG_INGAME_I":      "Show menu on combo key press",
   "MSG_PATCHE_I":      "Run PatchEngine to generate patches for this ROM",
   "MSG_PATCHRTC_I":    "Emulate an RTC clock (only on supported games). Press A to change time & date.",

@@ -225,5 +225,7 @@
     "MSG_UIS_SPD2": "Обычно",
     "MSG_UIS_SPD3": "Быстро",
     "MSG_UIS_SPD4": "Оч. быстро",
-    "MSG_STILLRTC": "Заморожено"
+    "MSG_STILLRTC": "Заморожено",
+    "MSG_SETT_HIDEEXT": "Скрывать расширения",
+    "MSG_SETT_HIDEEXT_I": "Скрывает расширение .gba в списках игр"
 }

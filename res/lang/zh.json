@@ -225,5 +225,7 @@
     "MSG_UIS_SPD2": "常规",
     "MSG_UIS_SPD3": "快",
     "MSG_UIS_SPD4": "非常快",
-    "MSG_STILLRTC": "静止"
+    "MSG_STILLRTC": "静止",
+    "MSG_SETT_HIDEEXT": "隐藏文件后缀",
+    "MSG_SETT_HIDEEXT_I": "在游戏列表、最近游戏和 Flash 列表中隐藏 .gba 后缀"
 }

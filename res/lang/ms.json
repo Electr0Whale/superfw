@@ -225,5 +225,7 @@
     "MSG_UIS_SPD2": "Biasa",
     "MSG_UIS_SPD3": "Laju",
     "MSG_UIS_SPD4": "Amat laju",
-    "MSG_STILLRTC": "Frozen"
+    "MSG_STILLRTC": "Frozen",
+    "MSG_SETT_HIDEEXT": "Sembunyikan sambungan fail",
+    "MSG_SETT_HIDEEXT_I": "Sembunyikan akhiran .gba dalam senarai permainan"
 }

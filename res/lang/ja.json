@@ -225,5 +225,7 @@
     "MSG_UIS_SPD2": "Regular",
     "MSG_UIS_SPD3": "Fast",
     "MSG_UIS_SPD4": "Very fast",
-    "MSG_STILLRTC": "Frozen"
+    "MSG_STILLRTC": "Frozen",
+    "MSG_SETT_HIDEEXT": "拡張子を隠す",
+    "MSG_SETT_HIDEEXT_I": "ROM・最近プレイ・フラッシュの一覧で .gba 拡張子を隠す"
 }

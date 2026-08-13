@@ -60,6 +60,7 @@ extern uint8_t menu_theme;
 extern uint8_t lang_id;
 extern uint8_t recent_menu;
 extern uint8_t hide_hidden;
+extern uint8_t hide_extensions;
 extern uint8_t anim_speed;
 
 // Defaults/Settings

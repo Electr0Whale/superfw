@@ -220,5 +220,7 @@
     "MSG_UIS_SPD2": "Normální",
     "MSG_UIS_SPD3": "Rychlá",
     "MSG_UIS_SPD4": "Velmi rychlá",
-    "MSG_STILLRTC": "Frozen"
+    "MSG_STILLRTC": "Frozen",
+    "MSG_SETT_HIDEEXT": "Hide file extensions",
+    "MSG_SETT_HIDEEXT_I": "Hides the .gba suffix in the ROM, recent and flash game lists"
 }

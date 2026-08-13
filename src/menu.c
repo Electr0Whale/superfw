@@ -124,6 +124,7 @@ enum {
   SettVerifyNOR,
   #endif
   SettFastEWRAM,
+  SettHideExt,
   SettSaveLoc,
   #ifdef SUPPORT_NORGAMES
   SettSaveLocNOR,
@@ -1251,6 +1252,21 @@ static void draw_rightj_text(const char *t, volatile uint8_t *frame, unsigned x,
   draw_text_idx8_bus16(t, basept, SCREEN_WIDTH, FT_COLOR);
 }
 
+// Returns the display name for a game entry: with hide_extensions on, the
+// trailing ".gba" suffix is cut off (rendered into tmpbuf). The icon logic
+// should still use the original name so the file type is recognized.
+static const char *game_dispname(const char *fn, char *tmpbuf, unsigned bufsz) {
+  if (hide_extensions) {
+    unsigned sl = strlen(fn);
+    if (sl > 4 && sl - 4 < bufsz - 1 && !strcasecmp(&fn[sl - 4], ".gba")) {
+      memcpy(tmpbuf, fn, sl - 4);
+      tmpbuf[sl - 4] = 0;
+      return tmpbuf;
+    }
+  }
+  return fn;
+}
+
 static void draw_central_text(const char *t, volatile uint8_t *frame, unsigned x, unsigned y) {
   unsigned twidth = font_width(t);
   uint8_t *basept = (uint8_t*)&frame[y * SCREEN_WIDTH + x - twidth / 2];
@@ -1352,11 +1368,17 @@ void render_recent(volatile uint8_t *frame) {
     unsigned rowy = (1 + i) * 16;
     unsigned rmax = (cover_on && rowy + 15 >= COVER_PANE_Y) ? (pane_x - 3) : SCREEN_WIDTH;
 
+    char tmpname[96];
+    const char *dispname = game_dispname(fn, tmpname, sizeof(tmpname));
+
     // Animate the row entries if they are too long!
     if (i == smenu.recent.selector - smenu.recent.seloff)
-      draw_text_ovf_rotate(fn, frame, 20, rowy, rmax - 24, &smenu.anim_state);
+      draw_text_ovf_rotate(dispname, frame, 20, rowy, rmax - 24, &smenu.anim_state);
     else
-      draw_text_ovf(fn, frame, 20, rowy, rmax - 24);
+      draw_text_ovf(dispname, frame, 20, rowy, rmax - 24);
+
+    if (e->flags & FLAG_RECENT_NOR)
+      draw_rightj_text("Flash", frame, rmax - 2, rowy);
   }
 
   unsigned selrowy = (smenu.recent.selector - smenu.recent.seloff + 1) * 16;
@@ -1409,11 +1431,13 @@ void render_flashbrowser(volatile uint8_t *frame) {
 
       // Animate the row entries if they are too long!
       const char *romname = &e->game_name[e->bnoffset];
+      char tmpname[96];
+      const char *dispname = game_dispname(romname, tmpname, sizeof(tmpname));
       if (i == smenu.fbrowser.selector - smenu.fbrowser.seloff)
-        draw_text_ovf_rotate(romname, frame, 20, rowy,
+        draw_text_ovf_rotate(dispname, frame, 20, rowy,
                              rmax - 26 - font_width(szstr), &smenu.anim_state);
       else
-        draw_text_ovf(romname, frame, 20, rowy, rmax - 26 - font_width(szstr));
+        draw_text_ovf(dispname, frame, 20, rowy, rmax - 26 - font_width(szstr));
     }
 
     unsigned selrowy = (smenu.fbrowser.selector - smenu.fbrowser.seloff + 1) * 16;
@@ -1490,11 +1514,13 @@ void render_browser(volatile uint8_t *frame) {
       draw_rightj_text(szstr, frame, rmax - 2, rowy);
 
       // Animate the row entries if they are too long!
+      char tmpname[96];
+      const char *dispname = game_dispname(e->fname, tmpname, sizeof(tmpname));
       if (i == smenu.browser.selector - smenu.browser.seloff)
-        draw_text_ovf_rotate(e->fname, frame, 20, rowy,
+        draw_text_ovf_rotate(dispname, frame, 20, rowy,
                              rmax - 26 - font_width(szstr), &smenu.anim_state);
       else
-        draw_text_ovf(e->fname, frame, 20, rowy, rmax - 26 - font_width(szstr));
+        draw_text_ovf(dispname, frame, 20, rowy, rmax - 26 - font_width(szstr));
     }
 
     unsigned selrowy = (smenu.browser.selector - smenu.browser.seloff + 1) * 16;
@@ -1875,6 +1901,11 @@ void render_settings(volatile uint8_t *frame) {
   }
 
   if (optnum++ >= baseopt && optcnt < maxrows) {
+    draw_text_ovf(msgs[lang_id][MSG_SETT_HIDEEXT], frame, 8, offy + rowh*optcnt, 224);
+    draw_central_option_text(msgs[lang_id][hide_extensions ? MSG_KNOB_ENABLED : MSG_KNOB_DISABLED], frame, colx, offy + rowh*optcnt++);
+  }
+
+  if (optnum++ >= baseopt && optcnt < maxrows) {
     draw_text_ovf(msgs[lang_id][MSG_SETT_SAVET], frame, 8, offy + rowh*optcnt, 224);
 
     if (save_path_default == SaveRomName)
@@ -1991,6 +2022,7 @@ void render_settings(volatile uint8_t *frame) {
                         smenu.set.selector == SettSaveBkp  ? MSG_BACKUP_I :
                         smenu.set.selector == SettFastSD   ? MSG_FASTSD_I :
                         smenu.set.selector == SettFastEWRAM? MSG_FASTEW_I :
+                        smenu.set.selector == SettHideExt  ? MSG_SETT_HIDEEXT_I :
                         smenu.set.selector == DefsPatchEng ? MSG_PATCH_TYPE_I0 + patcher_default :
                         smenu.set.selector == DefsLoadPol  ? MSG_DEF_LOADP_I0 + (autoload_default ^ 1) :
                         smenu.set.selector == DefsSavePol  ? MSG_DEF_SAVEP_I0 + (autosave_default ^ 1) :
@@ -3126,6 +3158,8 @@ static void keypress_menu_settings(unsigned newkeys) {
       use_slowld ^= 1;
     else if (smenu.set.selector == SettFastEWRAM)
       use_fastew = fastew ? (use_fastew ^ 1) : 0;
+    else if (smenu.set.selector == SettHideExt)
+      hide_extensions ^= 1;
     #ifdef SUPPORT_NORGAMES
     else if (smenu.set.selector == SettVerifyNOR)
       use_verify_nor ^= 1;
