@@ -137,6 +137,7 @@
     "IMENU_GOBACK": "Kembali",
     "IMENU_UPDAT_RTC": "Kemaskinikan RTC",
     "IMENU_RST0_GAME": "Semulakan main",
+    "IMENU_RST0_GAME_LOAD_SAVE": "Main semula dan muat simpanan",
     "IMENU_RST2_DEVSKIP": "Keluar (tanpa simpan)",
     "IMENU_SAVE0_OW": "Simpan ke SD (tulis ganti)",
     "IMENU_SAVE1_BKP": "Simpan ke SD (disandar)",

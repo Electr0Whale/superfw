@@ -137,6 +137,7 @@
     "IMENU_GOBACK": "Go back",
     "IMENU_UPDAT_RTC": "Update RTC clock",
     "IMENU_RST0_GAME": "Reset game",
+    "IMENU_RST0_GAME_LOAD_SAVE": "ゲームをリセットしてセーブを読み込む",
     "IMENU_RST2_DEVSKIP": "Back to menu (skip save)",
     "IMENU_SAVE0_OW": "Save to SD (overwrite)",
     "IMENU_SAVE1_BKP": "Save to SD (with backup)",

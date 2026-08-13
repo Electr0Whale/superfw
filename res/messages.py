@@ -265,6 +265,7 @@ en_menu_strings = [
   "IMENU_UPDAT_RTC":        "Update RTC clock",
 
   "IMENU_RST0_GAME":        "Reset game",
+  "IMENU_RST0_GAME_LOAD_SAVE": "Reset game and load save",
   "IMENU_RST1_DEVICE":      "Reset to menu",
   "IMENU_RST2_DEVSKIP":     "Back to menu (skip save)",
 

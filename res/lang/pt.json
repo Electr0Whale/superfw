@@ -135,6 +135,7 @@
     "IMENU_GOBACK": "Voltar",
     "IMENU_UPDAT_RTC": "Atualizar relógio RTC",
     "IMENU_RST0_GAME": "Reiniciar jogo",
+    "IMENU_RST0_GAME_LOAD_SAVE": "Reiniciar o jogo e carregar o save",
     "IMENU_RST2_DEVSKIP": "Voltar ao menu (sem salvar)",
     "IMENU_SAVE0_OW": "Salvar na SD (sobrescrever)",
     "IMENU_SAVE1_BKP": "Salvar na SD (com backup)",

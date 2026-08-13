@@ -135,6 +135,7 @@
     "IMENU_GOBACK": "뒤로 가기",
     "IMENU_UPDAT_RTC": "RTC 설정",
     "IMENU_RST0_GAME": "게임 리셋",
+    "IMENU_RST0_GAME_LOAD_SAVE": "게임을 재설정하고 저장을 불러오기",
     "IMENU_RST2_DEVSKIP": "메뉴로 돌아가기 (저장 생략)",
     "IMENU_SAVE0_OW": "SD카드에 저장 (덮어쓰기)",
     "IMENU_SAVE1_BKP": "SD카드에 저장 (백업 포함)",
