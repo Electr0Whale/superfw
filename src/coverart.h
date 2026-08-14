@@ -1,11 +1,12 @@
 /*
  * Cover-art / title-screen preview for the ROM browser.
  *
- * Reads EZ-Flash-Omega style thumbnails directly from the SD card:
- *   /IMGS/{c0}/{c1}/{CODE}.bmp  (120x75, 16bpp X1R5G5B5 BMP, keyed by GBA game code)
- * Each pixel is mapped on the fly to a fixed 6x6x6 (216 color) palette cube that
- * lives in the free BG palette indices 20..235, and blitted into a bottom-right
- * pane of the Mode-4 menu framebuffer (EZ-Flash-Omega style).
+ * Reads covers from the packed resource file /.superfw/covers.pak, generated
+ * offline by tools/coverart-pack.py from EZ-Flash-Omega style thumbnails
+ * (/IMGS/{c0}/{c1}/{CODE}.bmp, 16bpp X1R5G5B5, keyed by GBA game code). Each
+ * cover carries a 216-color palette that lives in the free BG palette indices
+ * 20..235, and is blitted into a bottom-right pane of the Mode-4 menu
+ * framebuffer (EZ-Flash-Omega style).
  */
 #ifndef __COVERART_H__
 #define __COVERART_H__
