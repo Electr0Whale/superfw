@@ -336,15 +336,17 @@ void coverart_pump(void) {
       memcpy(&cover_pix[(ca_row + i) * COVER_MAX_W], ca_rowbuf, ca_width);
       done++;
     }
-    f_close(&ca_fd);
-    ca_fd_open = false;
     ca_row += done;
     if (done < rows) {
       ca_fail();
       break;
     }
-    if (ca_row >= ca_height)
+    // Keep the FatFs object valid while later row chunks are still pending.
+    if (ca_row >= ca_height) {
+      f_close(&ca_fd);
+      ca_fd_open = false;
       ca_state = CA_DONE;
+    }
     break;
   }
 
@@ -533,13 +535,21 @@ void coverart_pump(void) {
         break;
       done++;
     }
-    f_sync(&ca_fd);
-    f_close(&ca_fd);
-    ca_fd_open = false;
     ca_row += done;
-    if (done < rows)
+    if (done < rows) {
+      f_close(&ca_fd);
+      ca_fd_open = false;
       f_unlink(ca_cachepath);   // drop the partial file
-    ca_state = CA_DONE;
+      ca_state = CA_DONE;
+      break;
+    }
+    // The cache file spans multiple pump calls; close it only after the last row.
+    if (ca_row >= ca_height) {
+      f_sync(&ca_fd);
+      f_close(&ca_fd);
+      ca_fd_open = false;
+      ca_state = CA_DONE;
+    }
     break;
   }
 
