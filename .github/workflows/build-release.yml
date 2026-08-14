@@ -4,10 +4,9 @@ run-name: Build a full SuperFW release
 on:
   push:
     branches:
-      - 'master'
-    tags-ignore:
-      - 'ci-*'
-      - '*wqy*'
+      - 'wqy10pt-font'
+    tags:
+      - 'v*'
     paths-ignore:
       - '**/*.md'
       - 'docs/**'
@@ -80,12 +79,14 @@ jobs:
         with:
           pattern: 'superfw-release-*'
           path: artifacts
-      - name: Create release and upload firmware
+      - name: Create release and upload firmware and cover-pack instructions
         run: |
+          mapfile -t firmware < <(find artifacts -type f -name '*.fw' -print)
           gh release create "${GITHUB_REF#refs/tags/}" \
             --title "Release ${GITHUB_REF#refs/tags/}" \
             --notes-from-tag \
-            artifacts/**/*.fw
+            "${firmware[@]}" \
+            docs/cover-pack-usage.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
