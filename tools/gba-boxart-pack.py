@@ -9,6 +9,7 @@ some text files that point at another PNG; both forms are handled here.
 
 import argparse
 import hashlib
+import json
 import re
 import struct
 import tempfile
@@ -136,10 +137,57 @@ def resize_cover(path):
         return im
 
 
+def load_alias_map(path, source, code_files):
+    """Add ROM-code aliases and explicitly named source covers from JSON."""
+    if path is None:
+        return 0, 0
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SystemExit("cannot read alias map %s: %s" % (path, exc))
+    if not isinstance(data, dict):
+        raise SystemExit("alias map must be a JSON object")
+    aliases = data.get("aliases", {})
+    direct = data.get("direct", {})
+    if not isinstance(aliases, dict) or not isinstance(direct, dict):
+        raise SystemExit("alias map aliases and direct entries must be objects")
+
+    def code(value, context):
+        if not isinstance(value, str) or not re.fullmatch(r"[A-Z0-9]{4}", value):
+            raise SystemExit("invalid ROM code for %s: %r" % (context, value))
+        return value
+
+    for dest, source_code in sorted(aliases.items()):
+        dest = code(dest, "alias destination")
+        source_code = code(source_code, "alias source")
+        if dest in code_files:
+            raise SystemExit("alias destination already has a cover: %s" % dest)
+        if source_code not in code_files:
+            raise SystemExit("alias source has no matched cover: %s" % source_code)
+        code_files[dest] = code_files[source_code]
+
+    for dest, filename in sorted(direct.items()):
+        dest = code(dest, "direct destination")
+        if dest in code_files:
+            raise SystemExit("direct destination already has a cover: %s" % dest)
+        if not isinstance(filename, str) or Path(filename).name != filename:
+            raise SystemExit("invalid direct source filename for %s" % dest)
+        candidate = source / filename
+        if not candidate.is_file():
+            raise SystemExit("direct source not found for %s: %s" % (dest, candidate))
+        try:
+            code_files[dest] = resolve_png(candidate)
+        except RuntimeError as exc:
+            raise SystemExit("invalid direct source for %s: %s" % (dest, exc))
+    return len(aliases), len(direct)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("source", type=Path, help="Named_Boxarts directory")
     ap.add_argument("output", type=Path, help="output covers.pak")
+    ap.add_argument("--alias-map", type=Path,
+                    help="JSON aliases/direct covers to add after GBHWDB matching")
     args = ap.parse_args()
     source = args.source.resolve()
     output = args.output.resolve()
@@ -183,6 +231,8 @@ def main():
 
     if not code_files:
         raise SystemExit("no GBHWDB titles matched Named_Boxarts")
+    alias_count, direct_count = load_alias_map(
+        args.alias_map.resolve() if args.alias_map else None, source, code_files)
     all_codes = {code for _title, code in rows}
     missing_codes = sorted(all_codes - set(code_files))
 
@@ -214,17 +264,21 @@ def main():
     report.write_text(
         "GBHWDB: %s\nsource PNG files: %d\nmatched title keys: %d\n"
         "GBHWDB ROM rows: %d\nGBHWDB unique ROM codes: %d\n"
-        "unique ROM codes: %d\nmissing source covers: %d\n"
+        "unique ROM codes: %d\nalias covers: %d\ndirect covers: %d\n"
+        "missing source covers: %d\n"
         "unmatched source files: %d\n"
         "pack bytes: %d\nsha256: %s\n" % (
             GBHWDB_URL, len(list(source.glob("*.png"))), len(matched_titles),
-            len(rows), len(all_codes), len(items), len(missing_codes),
+            len(rows), len(all_codes), len(items), alias_count, direct_count,
+            len(missing_codes),
             len(unmatched), len(pack), hashlib.sha256(pack).hexdigest()),
         encoding="utf-8")
     if missing_codes:
         with report.open("a", encoding="utf-8") as f:
             f.write("missing ROM IDs: %s\n" % ", ".join(missing_codes))
     print("wrote %s: %d ROM codes, %d bytes" % (output, len(items), len(pack)))
+    if alias_count or direct_count:
+        print("added %d aliases and %d direct covers" % (alias_count, direct_count))
     print("matched title keys: %d; excluded source images: %d" %
           (len(matched_titles), len(unmatched)))
     print("report: %s" % report)
