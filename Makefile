@@ -8,6 +8,7 @@ CXX		:= $(PREFIX)g++
 CPP		:= $(PREFIX)cpp
 OBJDUMP		:= $(PREFIX)objdump
 OBJCOPY		:= $(PREFIX)objcopy
+PYTHON		?= python3
 
 COMPRESSION_RATIO ?= 4
 
@@ -212,15 +213,15 @@ ingame_trampoline.payload:	src/ingame_trampoline.S
 	$(OBJCOPY) --output-target=binary ingame_trampoline.elf ingame_trampoline.payload
 
 src/messages_data.h:	res/messages.py
-	./res/messages.py h main > src/messages_data.h
+	$(PYTHON) res/messages.py h main > src/messages_data.h
 
 src/menu_messages.h:	res/messages.py
-	./res/messages.py h menu > src/menu_messages.h
+	$(PYTHON) res/messages.py h menu > src/menu_messages.h
 
 $(FONT_PACK) $(FONT_EXT_PACK) $(FONT_EMBED): res/fonts/build.py \
 		wenquanyi_10pt.bdf fusion-pixel-12px-monospaced-zh_hans.bdf \
 		res/fonts/bdf_to_pack.py res/fonts/combine_fonts.py res/fonts/pack_to_carray.py
-	./res/fonts/build.py
+	$(PYTHON) res/fonts/build.py
 
 firmware.ewram.gba.comp:	firmware.ewram.gba ./upkr.elf
 	./upkr.elf -l $(COMPRESSION_RATIO) $< $@
