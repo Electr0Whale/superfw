@@ -17,7 +17,8 @@ jobs:
     runs-on: ubuntu-24.04
     strategy:
       matrix:
-        board: [sd, lite, chis]
+        # The WenQuanYi extended font pack requires the Chis 2 MiB ROM budget.
+        board: [chis]
 
     steps:
       - name: Install dependencies

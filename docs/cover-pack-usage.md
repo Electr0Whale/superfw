@@ -1,7 +1,9 @@
 # GBA Cover Pack Usage
 
 This release includes `superfw-covers.pak`, a prebuilt GBA box-art package for
-SuperFW's cover browser.
+SuperFW's cover browser. The accompanying firmware is for SuperCard Chis
+hardware; its WenQuanYi extended font pack does not fit the SD or Lite ROM
+budgets.
 
 1. Install the matching SuperFW firmware from this release.
 2. Create a `.superfw` directory at the root of the SD card if it does not
